@@ -37,20 +37,25 @@
   <div id="snap-preview"></div>
   <div id="drag-shield"></div>
 
-  <!-- Taskbar -->
-  <nav id="taskbar" aria-label="Taskbar">
+  <!-- macOS-style menu bar (optional, js/shell.js) -->
+  <header id="menubar" aria-label="Menu bar"><div class="mb-left" id="mb-left"></div><div class="mb-right" id="mb-right"></div></header>
+  <div id="tray-float"></div>
+  <div id="tb-hot"></div>
+
+  <!-- Taskbar / dock -->
+  <nav id="taskbar" aria-label="Taskbar" data-mode="bar" data-pos="bottom">
     <button id="tb-start" class="tb-start" aria-label="Start menu" aria-haspopup="true">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
     </button>
     <div id="tb-tasks" class="tb-tasks"></div>
-    <div class="tb-tray">
+    <div id="tb-tray" class="tb-tray">
       <button id="tray-ram" class="tray-ram" title="Open Task Manager">
         <span class="lbl">RAM</span><span class="v mono">— MB</span><span class="meter"><i></i></span>
       </button>
       <button id="tray-user" class="tray-user" aria-label="Profile menu"></button>
       <div id="tray-clock" class="tray-clock"></div>
-      <button id="tb-desk" class="tb-desk" title="Show desktop" aria-label="Show desktop"></button>
     </div>
+    <button id="tb-desk" class="tb-desk" title="Show desktop" aria-label="Show desktop"></button>
   </nav>
 
   <!-- Start menu -->
@@ -74,5 +79,6 @@
   <script src="js/telemetry.js"></script>
   <script src="js/filesystem.js"></script>
   <script src="js/desktop.js"></script>
+  <script src="js/shell.js"></script>
 </body>
 </html>

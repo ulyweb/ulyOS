@@ -172,7 +172,10 @@
   const MIN_H = 180;
 
   const layer = () => document.getElementById('windows');
-  WM.area = () => ({ w: window.innerWidth, h: window.innerHeight - cssNum('--taskbar-h', 52) });
+  const inset = (n) => cssNum('--inset-' + n, 0);
+  /** Usable window area (excludes menu bar / taskbar). Coordinates are relative to #windows. */
+  WM.area = () => ({ w: window.innerWidth - inset('left') - inset('right'), h: window.innerHeight - inset('top') - inset('bottom') });
+  WM.origin = () => ({ x: inset('left'), y: inset('top') });
   WM.all = () => [...registry.values()];
   WM.get = (id) => registry.get(id);
   WM.byApp = (appId) => WM.all().filter((w) => w.appId === appId);
@@ -238,7 +241,8 @@
     if (!p) return;
     if (!kind) { p.classList.remove('on'); return; }
     const r = snapRect(kind);
-    Object.assign(p.style, { left: r.x + 'px', top: r.y + 'px', width: r.w + 'px', height: r.h + 'px' });
+    const o = WM.origin();
+    Object.assign(p.style, { left: r.x + o.x + 'px', top: r.y + o.y + 'px', width: r.w + 'px', height: r.h + 'px' });
     p.classList.add('on');
   }
   function applySnap(win, kind) {
@@ -290,9 +294,10 @@
       applyPos(win, nx, ny);
       snapKind = null;
       if (win.resizable !== false) {
-        if (ev.clientY <= 3) snapKind = 'max';
-        else if (ev.clientX <= 3) snapKind = 'left';
-        else if (ev.clientX >= window.innerWidth - 4) snapKind = 'right';
+        const o = WM.origin();
+        if (ev.clientY <= o.y + 3) snapKind = 'max';
+        else if (ev.clientX <= o.x + 3) snapKind = 'left';
+        else if (ev.clientX >= o.x + a.w - 4) snapKind = 'right';
       }
       showSnapPreview(snapKind);
     };
@@ -403,7 +408,7 @@
 
   /* ---- minimize / restore / maximize / close ---- */
   function dockOffset(win) {
-    const item = document.querySelector('.tb-item[data-wid="' + win.id + '"]');
+    const item = document.querySelector('.tb-item[data-wids~="' + win.id + '"]');
     if (!item) return { x: 0, y: 120 };
     const ir = item.getBoundingClientRect();
     const wr = win.el.getBoundingClientRect();
@@ -497,6 +502,16 @@
     try { win.onClose?.(win); } catch (err) { console.error(err); }
     if (win.focused) focusTopmost();
     return true;
+  };
+
+  /* Window open/close animation style (set from Settings; 'random' picks per window). */
+  const ANIM_STYLES = ['scale', 'slide', 'fade', 'zoom', 'bounce', 'blur'];
+  ulyOS.anim = {
+    styles: ANIM_STYLES, mode: 'scale',
+    pick() {
+      if (this.mode === 'random') return ANIM_STYLES[Math.floor(Math.random() * ANIM_STYLES.length)];
+      return ANIM_STYLES.includes(this.mode) ? this.mode : 'scale';
+    },
   };
 
   WM.minimizeAll = () => WM.all().forEach((w) => WM.minimize(w));
@@ -611,7 +626,7 @@
 
     const el = h('section', {
       class: 'window opening', role: 'dialog', 'aria-label': win.title, tabindex: -1,
-      dataset: { wid: win.id, app: win.appId },
+      dataset: { wid: win.id, app: win.appId, anim: ulyOS.anim.pick() },
     }, titlebar, body, shield);
     if (win.resizable) {
       ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].forEach((dir) => {
@@ -708,6 +723,7 @@
     if (!ctx) return;
     const c = ctx; ctx = null;
     c.menus.forEach((m) => m.remove());
+    try { c.onClose?.(); } catch (err) { console.error(err); }
     document.removeEventListener('pointerdown', c.onDown, true);
     document.removeEventListener('keydown', c.onKey, true);
     document.removeEventListener('wheel', ui.closeMenu, true);
@@ -770,9 +786,9 @@
     return menu;
   }
 
-  ui.contextMenu = function (x, y, items) {
+  ui.contextMenu = function (x, y, items, opts = {}) {
     ui.closeMenu();
-    const state = { menus: [] };
+    const state = { menus: [], onClose: opts.onClose };
     ctx = state;
     const menu = buildMenu(items);
     state.menus.push(menu);

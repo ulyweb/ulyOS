@@ -23,7 +23,7 @@ Open http://localhost:8080 in Chrome or Edge (use `localhost` or HTTPS, not `fil
 ## Apps
 | App | Source |
 |---|---|
-| TrustVault | digital legacy platform (`apps/trustvault.html`) |
+| TrustVault | digital legacy platform, bundled in `apps/trustvault.html` but not a default icon |
 | QR Seal | password-protected QR generator and reader (from ulyweb/qrcode) |
 | System Vault | key and passphrase generator with entropy scoring (from ulyweb/key) |
 | Crypto Compass | beginner crypto guide and prices (from ulyweb/crypto) |
@@ -39,3 +39,7 @@ Drag, resize, maximize, minimize, close, edge snap, z-order. Iframes get `pointe
 
 ## Task Manager
 Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
+
+## Personalize
+- Settings → Appearance / Effects / Desktop: 14 wallpapers, cursor styles, icon styles and window animation styles, each with a **Random** option, plus **Surprise me** (and an optional "surprise me on every sign-in").
+- Settings → Dock & Menu bar: taskbar or floating dock at any screen edge, auto-hide, icon magnification, pinned apps, and an optional macOS-style menu bar.

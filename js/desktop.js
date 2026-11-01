@@ -18,6 +18,10 @@
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
     cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: false,
+    cursorStyle: 'classic', animStyle: 'scale', iconStyle: 'glass', shuffleOnLogin: false,
+    // taskbar / dock / menu bar (see js/shell.js)
+    taskbarMode: 'bar', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
+    showRam: true, showClock: true, menubar: false, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
   };
   let settings = { ...DEFAULT_SETTINGS };   // replaced with the profile's saved settings on sign-in
   const Settings = (ulyOS.settings = {
@@ -28,13 +32,40 @@
       applySettings(k);
       bus.emit('settings:change', { key: k, value: v });
     },
-    reset() { settings = { ...DEFAULT_SETTINGS }; store.set('ulyos.settings', settings); applySettings(); applyWallpaper(); },
+    patch(obj) { Object.assign(settings, obj); store.set('ulyos.settings', settings); applySettings(); bus.emit('settings:change', { key: '*', value: obj }); },
+    reset() { settings = { ...DEFAULT_SETTINGS }; eff = {}; store.set('ulyos.settings', settings); applySettings(); applyWallpaper(); },
   });
 
   const ICON_SIZES = { small: { cw: 88, ch: 96, tile: 44 }, medium: { cw: 100, ch: 110, tile: 52 }, large: { cw: 116, ch: 128, tile: 64 } };
   const WALLPAPERS = [
     ['void', 'Void'], ['aurora', 'Aurora'], ['grid', 'Grid'], ['ocean', 'Deep Ocean'], ['ember', 'Ember'], ['mono', 'Graphite'],
+    ['sunset', 'Sunset'], ['forest', 'Forest'], ['nebula', 'Nebula'], ['midnight', 'Midnight'], ['rose', 'Rose'], ['carbon', 'Carbon'], ['lagoon', 'Lagoon'], ['dusk', 'Dusk'],
   ];
+  const CURSOR_STYLES = [['classic', 'Classic arrow'], ['dot', 'Dot'], ['cross', 'Crosshair'], ['neon', 'Neon arrow'], ['ring', 'Ring'], ['system', 'System default']];
+  const ANIM_STYLES = [['scale', 'Scale'], ['slide', 'Slide up'], ['fade', 'Fade'], ['zoom', 'Zoom'], ['bounce', 'Bounce'], ['blur', 'Blur in']];
+  const ICON_STYLES = [['glass', 'Glass'], ['flat', 'Flat'], ['outline', 'Outline'], ['circle', 'Circle'], ['neon', 'Neon'], ['gradient', 'Gradient']];
+  const POOLS = { wallpaper: WALLPAPERS.map((w) => w[0]), cursorStyle: ['classic', 'dot', 'cross', 'neon', 'ring'], iconStyle: ICON_STYLES.map((i) => i[0]) };
+  const rnd = (a) => a[Math.floor(Math.random() * a.length)];
+  /* "random" settings resolve to one concrete pick that stays stable for the whole session */
+  let eff = {};
+  const val = (k) => (settings[k] === 'random' ? (eff[k] || (eff[k] = rnd(POOLS[k]))) : settings[k]);
+  function hslHex(h2, sat, lig) {
+    const a = (sat / 100) * Math.min(lig / 100, 1 - lig / 100);
+    const f = (n) => { const k = (n + h2 / 30) % 12; const c = lig / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(255 * c).toString(16).padStart(2, '0'); };
+    return '#' + f(0) + f(8) + f(4);
+  }
+  /** Randomise look & feel in one go (wallpaper, accent, cursor, icons, animations). */
+  function surprise(announce = true) {
+    const pick = {
+      wallpaper: rnd(POOLS.wallpaper), accent: hslHex(Math.floor(Math.random() * 360), 78, 68),
+      cursorStyle: rnd(POOLS.cursorStyle), iconStyle: rnd(POOLS.iconStyle), animStyle: rnd(ANIM_STYLES.map((a) => a[0])),
+    };
+    eff = {};
+    Settings.patch(pick);
+    applyWallpaper();
+    ulyOS.audit('Surprise me: wallpaper ' + pick.wallpaper + ', cursor ' + pick.cursorStyle + ', icons ' + pick.iconStyle + ', animation ' + pick.animStyle + ', accent ' + pick.accent, 'info');
+    if (announce) ui.toast('🎲 ' + WALLPAPERS.find((w) => w[0] === pick.wallpaper)[1] + ' · ' + pick.cursorStyle + ' cursor · ' + pick.iconStyle + ' icons · ' + pick.animStyle + ' windows', { timeout: 4200 });
+  }
 
   function hexToRgb(hex) {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex) || [0, '8fa3ff'];
@@ -52,21 +83,25 @@
     document.body.classList.toggle('no-anim', !s.animations);
     document.body.classList.toggle('no-blur', s.blur === 0);
     Cursor.apply();
+    document.body.dataset.icons = val('iconStyle') || 'glass';
+    ulyOS.anim.mode = s.animStyle || 'scale';
     const sz = ICON_SIZES[s.iconSize] || ICON_SIZES.medium;
     root.style.setProperty('--cell-w', sz.cw + 'px');
     root.style.setProperty('--cell-h', sz.ch + 'px');
     root.style.setProperty('--tile', sz.tile + 'px');
+    ulyOS.Shell?.layout?.();   // first: it changes the usable area the icon grid is measured against
     if (Desktop.ready) Desktop.layout();
-    Taskbar.tickClock?.();
+    ulyOS.Shell?.tickClock?.();
   }
 
   let wpUrl = null;
   async function applyWallpaper() {
     const wp = $('#wallpaper');
     wp.removeAttribute('style');
-    wp.className = 'wp-' + settings.wallpaper;
-    if (settings.wallpaper === 'solid') wp.style.background = settings.wallpaperColor;
-    if (settings.wallpaper === 'custom') {
+    const wpv = val('wallpaper');
+    wp.className = 'wp-' + wpv;
+    if (wpv === 'solid') wp.style.background = settings.wallpaperColor;
+    if (wpv === 'custom') {
       let url = settings.wallpaperCustom;
       if (url.startsWith('opfs:')) {
         const f = await ulyOS.FS.readSandboxFile(url.slice(5));
@@ -82,13 +117,29 @@
      ========================================================================== */
   const Cursor = {
     apply() {
-      const on = settings.cursor;
+      const style = val('cursorStyle') || 'classic';
+      const on = settings.cursor && style !== 'system';
       document.body.classList.toggle('no-cursor', !on);
+      const ac = settings.accent;
       const svg = (body, hx, hy, fb) => 'url("data:image/svg+xml,' + encodeURIComponent(
         '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">' + body + '</svg>') + '") ' + hx + ' ' + hy + ', ' + fb;
-      if (on) {
-        root.style.setProperty('--cur-default', svg('<path d="M6 4l15 8.2-6.6 1.9-2.9 6.4z" fill="#fff" stroke="#000" stroke-opacity=".85" stroke-width="1.3" stroke-linejoin="round"/>', 6, 4, 'default'));
-        root.style.setProperty('--cur-pointer', svg('<circle cx="14" cy="14" r="7" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="1.4"/><circle cx="14" cy="14" r="2" fill="#fff"/>', 14, 14, 'pointer'));
+      const ARROW = 'M6 4l15 8.2-6.6 1.9-2.9 6.4z';
+      const SETS = {
+        classic: [svg('<path d="' + ARROW + '" fill="#fff" stroke="#000" stroke-opacity=".85" stroke-width="1.3" stroke-linejoin="round"/>', 6, 4, 'default'),
+          svg('<circle cx="14" cy="14" r="7" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="1.4"/><circle cx="14" cy="14" r="2" fill="#fff"/>', 14, 14, 'pointer')],
+        dot: [svg('<circle cx="14" cy="14" r="4.2" fill="#fff" stroke="#000" stroke-opacity=".75" stroke-width="1.3"/>', 14, 14, 'default'),
+          svg('<circle cx="14" cy="14" r="8" fill="none" stroke="' + ac + '" stroke-width="1.8"/><circle cx="14" cy="14" r="2.6" fill="' + ac + '"/>', 14, 14, 'pointer')],
+        cross: [svg('<path d="M14 3v22M3 14h22" stroke="#000" stroke-opacity=".7" stroke-width="3.2"/><path d="M14 3v22M3 14h22" stroke="#fff" stroke-width="1.3"/>', 14, 14, 'crosshair'),
+          svg('<circle cx="14" cy="14" r="6" fill="none" stroke="' + ac + '" stroke-width="1.6"/><path d="M14 2v6M14 20v6M2 14h6M20 14h6" stroke="' + ac + '" stroke-width="1.6"/>', 14, 14, 'pointer')],
+        neon: [svg('<path d="' + ARROW + '" fill="rgba(0,0,0,.55)" stroke="' + ac + '" stroke-opacity=".35" stroke-width="4.5" stroke-linejoin="round"/><path d="' + ARROW + '" fill="rgba(0,0,0,.4)" stroke="' + ac + '" stroke-width="1.6" stroke-linejoin="round"/>', 6, 4, 'default'),
+          svg('<circle cx="14" cy="14" r="8" fill="' + ac + '" fill-opacity=".18" stroke="' + ac + '" stroke-opacity=".4" stroke-width="4"/><circle cx="14" cy="14" r="8" fill="none" stroke="' + ac + '" stroke-width="1.6"/>', 14, 14, 'pointer')],
+        ring: [svg('<circle cx="14" cy="14" r="7" fill="none" stroke="#000" stroke-opacity=".6" stroke-width="3.2"/><circle cx="14" cy="14" r="7" fill="none" stroke="#fff" stroke-width="1.5"/>', 14, 14, 'default'),
+          svg('<circle cx="14" cy="14" r="7" fill="' + ac + '" stroke="#fff" stroke-width="1.5"/>', 14, 14, 'pointer')],
+      };
+      const set = SETS[style];
+      if (on && set) {
+        root.style.setProperty('--cur-default', set[0]);
+        root.style.setProperty('--cur-pointer', set[1]);
       } else {
         root.style.setProperty('--cur-default', 'default');
         root.style.setProperty('--cur-pointer', 'pointer');
@@ -181,7 +232,6 @@
     { id: 'youtube', kind: 'url', name: 'YouTube', url: 'https://www.youtube.com/', glyph: 'video', mode: 'tab', tint: '#ff5c5c' },
     { id: 'xrp', kind: 'url', name: 'XRP Price', url: 'https://coinmarketcap.com/currencies/xrp/', glyph: 'trending', mode: 'tab', tint: '#38bdf8' },
     { id: 'outlook', kind: 'url', name: 'Outlook', url: 'https://outlook.office.com/mail', glyph: 'mail', mode: 'tab', tint: '#4fa3ff' },
-    { id: 'trustvault', kind: 'local', name: 'TrustVault', file: 'apps/trustvault.html', glyph: 'shield', mem: 48, w: 1180, h: 760, tint: '#5eead4' },
     { id: 'qrseal', kind: 'local', name: 'QR Seal', file: 'apps/qrseal.html', glyph: 'qr', mem: 60, w: 980, h: 760, tint: '#c4b5fd' },
     { id: 'systemvault', kind: 'local', name: 'System Vault', file: 'apps/systemvault.html', glyph: 'key', mem: 62, w: 1100, h: 760, tint: '#fb7185' },
     { id: 'cryptocompass', kind: 'local', name: 'Crypto Compass', file: 'apps/cryptocompass.html', glyph: 'compass', mem: 40, w: 1100, h: 760, tint: '#fbbf24' },
@@ -434,6 +484,7 @@
         const n = await ui.prompt({ title: 'Rename icon', label: 'Name', value: ic.name, okText: 'Rename', validate: (v) => (v.trim() ? null : 'Name required') });
         if (n) { ulyOS.audit("Desktop icon '" + ic.name + "' renamed to '" + n.trim() + "'", 'info'); ic.name = n.trim(); Desktop.render(); }
       } },
+      { label: ulyOS.Shell && ulyOS.Shell.isPinned(ic.id) ? 'Remove from taskbar' : 'Keep in taskbar', icon: 'plus', disabled: multi, action: () => ulyOS.Shell.togglePin(ic.id) },
       { separator: true },
       { label: multi ? 'Delete ' + sel.length + ' icons' : 'Delete', icon: 'trash', danger: true, shortcut: 'Del', action: () => sel.forEach((i) => removeIcon(i)) },
     ];
@@ -445,10 +496,12 @@
       { label: 'New URL shortcut…', icon: 'plus', action: () => shortcutDialog(null) },
       { label: 'New text document', icon: 'filePlus', action: () => ulyOS.FS.newDocument() },
       { separator: true },
-      { label: 'Wallpaper', icon: 'image', submenu: WALLPAPERS.map(([id, label]) => ({
+      { label: 'Surprise me  🎲', icon: 'sparkles', action: () => surprise(true) },
+      { label: 'Wallpaper', icon: 'image', submenu: [{ label: (settings.wallpaper === 'random' ? '✓ ' : '    ') + '🎲 Random each sign-in', action: () => { Settings.set('wallpaper', 'random'); eff = {}; applyWallpaper(); } }, { separator: true }].concat(WALLPAPERS.map(([id, label]) => ({
         label: (settings.wallpaper === id ? '✓ ' : '    ') + label,
         action: () => { Settings.set('wallpaper', id); applyWallpaper(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
-      })).concat([{ separator: true }, { label: 'More in Settings…', icon: 'settings', action: () => SettingsApp.open('appearance') }]) },
+      }))).concat([{ separator: true }, { label: 'More in Settings…', icon: 'settings', action: () => SettingsApp.open('appearance') }]) },
+      { label: 'Customize dock & menu bar…', icon: 'desktop', action: () => SettingsApp.open('shell') },
       { label: 'Icon size', icon: 'grid', submenu: ['small', 'medium', 'large'].map((s) => ({
         label: (settings.iconSize === s ? '✓ ' : '    ') + s[0].toUpperCase() + s.slice(1),
         action: () => Settings.set('iconSize', s),
@@ -470,6 +523,11 @@
     if (!store.get('ulyos.migr.addYtXrpOutlook', false)) {   // one-time: new stock icons for existing profiles
       ['youtube', 'xrp', 'outlook'].forEach((id) => { if (!Desktop.icons.some((i) => i.id === id)) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === id) }); });
       store.set('ulyos.migr.addYtXrpOutlook', true);
+      if (saved) saveIcons();
+    }
+    if (!store.get('ulyos.migr.dropTrustVault', false)) {   // one-time: TrustVault is no longer a stock icon
+      Desktop.icons = Desktop.icons.filter((i) => i.id !== 'trustvault');
+      store.set('ulyos.migr.dropTrustVault', true);
       if (saved) saveIcons();
     }
     if (!store.get('ulyos.migr.dropPhotopeaSpotify', false)) {   // one-time: these are no longer stock icons
@@ -497,123 +555,6 @@
     });
     window.addEventListener('resize', () => { if (Desktop.ready) Desktop.layout(); });
     Desktop.ready = true;
-  };
-
-  /* ==========================================================================
-     Taskbar + Start menu
-     ========================================================================== */
-  const Taskbar = {};
-  Taskbar.init = function () {
-    const tasks = $('#tb-tasks');
-    const items = new Map();
-
-    function paintItem(win) {
-      const it = items.get(win.id);
-      if (!it) return;
-      it.classList.toggle('active', win.focused && !win.minimized);
-      it.classList.toggle('minimized', win.minimized);
-      it.querySelector('.tb-title').textContent = win.title;
-    }
-    bus.on('window:open', (win) => {
-      const it = h('button', {
-        class: 'tb-item', dataset: { wid: win.id }, title: win.title,
-        onclick: () => {
-          if (win.minimized) WM.focus(win);
-          else if (win.focused) WM.minimize(win);
-          else WM.focus(win);
-        },
-        onauxclick: (e) => { if (e.button === 1) WM.close(win); },
-        oncontextmenu: (e) => { e.preventDefault(); e.stopPropagation(); ui.contextMenu(e.clientX, e.clientY, WM.menuFor(win)); },
-      }, h('span', { class: 'tb-ico', html: win.icon }), h('span', { class: 'tb-title', text: win.title }));
-      items.set(win.id, it);
-      tasks.append(it);
-      paintItem(win);
-    });
-    bus.on('window:close', (win) => { items.get(win.id)?.remove(); items.delete(win.id); });
-    ['window:focus', 'window:minimize', 'window:restore', 'window:title'].forEach((ev) =>
-      bus.on(ev, () => WM.all().forEach(paintItem)));
-
-    $('#tb-desk').addEventListener('click', () => {
-      const anyVisible = WM.all().some((w) => !w.minimized);
-      anyVisible ? WM.minimizeAll() : WM.restoreAll();
-    });
-
-    // tray: RAM chip + clock
-    const ram = $('#tray-ram');
-    ram.addEventListener('click', () => ulyOS.Telemetry.open());
-    bus.on('telemetry:tick', (s) => {
-      ram.querySelector('.v').textContent = Math.round(s.ram) + ' MB';
-      const r = clamp(s.ram / s.ramLimit, 0, 1);
-      ram.querySelector('i').style.width = r * 100 + '%';
-      ram.classList.toggle('warn', r > 0.6); ram.classList.toggle('bad', r > 0.8);
-    });
-    const clock = $('#tray-clock');
-    Taskbar.tickClock = () => {
-      const d = new Date();
-      clock.innerHTML = '<b>' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + (settings.clockSeconds ? ':' + pad2(d.getSeconds()) : '') +
-        '</b><span>' + d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + '</span>';
-    };
-    Taskbar.tickClock();
-    setInterval(Taskbar.tickClock, 1000);
-
-    /* start menu */
-    const menu = $('#start-menu'), btn = $('#tb-start');
-    const list = $('#sm-list'), search = $('#sm-search');
-    const entries = () => {
-      const out = Object.entries(SYS_APPS).map(([k, a]) => ({ name: a.name, html: icon(a.icon, 18), run: a.open }));
-      DEFAULT_ICONS.filter((d) => d.kind !== 'sys').forEach((d) => out.push({ name: d.name, html: iconHTML(d, 18), run: () => launch(d) }));
-      Desktop.icons.filter((i) => i.kind === 'url' && !DEFAULT_ICONS.some((d) => d.id === i.id)).forEach((i) => out.push({ name: i.name, html: iconHTML(i, 18), run: () => launch(i) }));
-      return out;
-    };
-    const fill = () => {
-      const q = search.value.trim().toLowerCase();
-      const rows = entries().filter((e) => !q || e.name.toLowerCase().includes(q));
-      list.replaceChildren(...(rows.length ? rows.map((e) => h('button', {
-        class: 'sm-item', onclick: () => { closeMenu(); e.run(); ulyOS.audit("Launching '" + e.name + "' from start menu", 'info'); },
-      }, h('span', { class: 'sm-ico', html: e.html }), h('span', { text: e.name }))) : [h('div', { class: 'fm-empty', text: 'No apps found' })]));
-    };
-    function openMenu() { menu.hidden = false; btn.classList.add('active'); search.value = ''; fill(); requestAnimationFrame(() => menu.classList.add('open')); search.focus(); }
-    function closeMenu() { menu.classList.remove('open'); btn.classList.remove('active'); setTimeout(() => { if (!menu.classList.contains('open')) menu.hidden = true; }, ulyOS.util.dur(180)); }
-    btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.contains('open') ? closeMenu() : openMenu(); });
-    search.addEventListener('input', fill);
-    search.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') list.querySelector('.sm-item')?.click();
-      if (e.key === 'Escape') closeMenu();
-    });
-    document.addEventListener('pointerdown', (e) => { if (menu.classList.contains('open') && !e.target.closest('#start-menu, #tb-start')) closeMenu(); }, true);
-    window.addEventListener('blur', () => { if (menu.classList.contains('open')) closeMenu(); });
-    $('#sm-fullscreen').addEventListener('click', () => {
-      closeMenu();
-      document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
-    });
-    $('#sm-restart').addEventListener('click', () => { closeMenu(); restart(); });
-    $('#sm-lock').addEventListener('click', () => { closeMenu(); lockNow(); });
-
-    /* profile chip */
-    const chip = $('#tray-user');
-    const paintChip = () => {
-      const p = ulyOS.security.profile();
-      if (!p) return;
-      chip.replaceChildren(...[h('span', { class: 'chip-av', style: { '--c': p.color }, text: p.name.trim().charAt(0).toUpperCase() }), h('span', { class: 'chip-name', text: p.name }), p.protected ? h('span', { class: 'chip-lock', html: icon('lock', 12) }) : null].filter(Boolean));
-      chip.title = 'Profile: ' + p.name;
-    };
-    paintChip();
-    bus.on('profile:change', paintChip);
-    chip.addEventListener('click', (e) => {
-      const r = chip.getBoundingClientRect();
-      const prot = ulyOS.security.isProtected();
-      ui.contextMenu(r.left, r.top - 8, [
-        { label: ulyOS.security.profile().name, icon: 'home', disabled: true },
-        { separator: true },
-        { label: prot ? 'Lock now' : 'Set a password to enable lock…', icon: 'lock', action: lockNow },
-        { label: 'Security settings…', icon: 'shield', action: () => SettingsApp.open('security') },
-        { separator: true },
-        { label: 'Switch profile / sign out', icon: 'power', danger: true, action: () => ulyOS.security.signOut() },
-      ]);
-      const m = document.querySelector('.ctx-menu');
-      if (m) { m.style.top = Math.max(8, r.top - m.offsetHeight - 8) + 'px'; }
-      e.stopPropagation();
-    });
   };
 
   function lockNow() {
@@ -785,7 +726,11 @@
     /* wallpaper tiles */
     const tiles = h('div', { class: 'wp-list' });
     const paintTiles = () => {
-      tiles.replaceChildren(...WALLPAPERS.map(([id, label]) => h('button', {
+      const randTile = h('button', {
+        class: 'wp-tile rand' + (settings.wallpaper === 'random' ? ' active' : ''), title: 'A different wallpaper every sign-in',
+        onclick: () => { Settings.set('wallpaper', 'random'); eff = {}; applyWallpaper(); paintTiles(); ulyOS.audit('Wallpaper set to random on each sign-in', 'info'); },
+      }, h('div', { class: 'wp-thumb' }, '🎲'), h('span', { text: 'Random' }));
+      tiles.replaceChildren(randTile, ...WALLPAPERS.map(([id, label]) => h('button', {
         class: 'wp-tile' + (settings.wallpaper === id ? ' active' : ''), title: label,
         onclick: () => { Settings.set('wallpaper', id); applyWallpaper(); paintTiles(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
       }, h('div', { class: 'wp-thumb wp-' + id }), h('span', { text: label }))));
@@ -808,8 +753,16 @@
     const paintSw = () => swatches.replaceChildren(...['#8fa3ff', '#5eead4', '#fbbf24', '#fb7185', '#a78bfa', '#e5e5e5'].map((c) => h('button', {
       class: 'swatch' + (settings.accent === c ? ' active' : ''), style: { background: c }, 'aria-label': 'Accent ' + c,
       onclick: () => { Settings.set('accent', c); paintSw(); ulyOS.audit('Accent color changed to ' + c, 'info'); },
-    })));
+    })), h('button', { class: 'btn sm', text: '🎲', title: 'Random accent', onclick: () => { Settings.set('accent', hslHex(Math.floor(Math.random() * 360), 78, 68)); paintSw(); } }));
     paintSw();
+    const choose = (key, list, extraRandom, after) => h('select', { class: 'input sm', onchange: (e) => { eff = {}; Settings.set(key, e.target.value); if (key === 'wallpaper') applyWallpaper(); after?.(); ulyOS.audit('Setting ' + key + ' → ' + e.target.value, 'info'); } },
+      list.map(([v, l]) => h('option', { value: v, text: l, selected: settings[key] === v })).concat(extraRandom ? [h('option', { value: 'random', text: '🎲 ' + extraRandom, selected: settings[key] === 'random' })] : []));
+    const tryAnim = () => {
+      const w = WM.open({ title: 'Animation preview', width: 320, height: 150, mem: 4, resizable: false,
+        content: h('div', { style: { padding: '30px', textAlign: 'center', color: 'var(--muted)' } }, 'Style: ', h('b', { text: '…' })) });
+      w.body.querySelector('b').textContent = w.el.dataset.anim;
+      setTimeout(() => WM.close(w, { force: true }), 1500);
+    };
 
     const seg = (key, opts) => {
       const w = h('div', { class: 'seg' });
@@ -822,6 +775,10 @@
 
     const sections = {
       appearance: h('div', {},
+        h('div', { class: 'set-tools' },
+          h('button', { class: 'btn primary', text: '🎲 Surprise me', title: 'Randomise wallpaper, accent, cursor, icons and animations', onclick: () => { surprise(true); paintTiles(); paintSw(); show('appearance'); } }),
+          h('button', { class: 'btn', text: 'Shuffle wallpaper', onclick: () => { Settings.set('wallpaper', rnd(POOLS.wallpaper)); applyWallpaper(); paintTiles(); } })),
+        row('Surprise me on every sign-in', 'Pick a fresh random wallpaper, accent, cursor, icon and animation style each time you sign in', sw('shuffleOnLogin')),
         h('h3', { text: 'Wallpaper' }), tiles,
         row('Solid color', 'Pick any flat background color', colorIn),
         row('Image from your computer', 'Stored in the sandbox filesystem (Wallpapers/)', h('button', { class: 'btn sm', html: icon('upload', 14) + ' Choose image…', onclick: () => fileIn.click() })),
@@ -835,21 +792,25 @@
       effects: h('div', {},
         h('h3', { text: 'Animations' }),
         row('UI animations', 'Window open/close/minimize, boot sequence, animated wallpapers', sw('animations')),
+        row('Window animation', 'How windows appear and close — “Random” picks a style for every window', h('div', { class: 'btn-row' }, choose('animStyle', ANIM_STYLES, 'Random per window'), h('button', { class: 'btn sm', text: 'Try', onclick: tryAnim }))),
         row('Animation speed', 'Slower ← → faster', range('animSpeed', 0.5, 2, 0.25, (v) => v + '×')),
         row('Boot animation', 'Show the full boot log on restart', sw('bootAnim')),
         h('h3', { text: 'Glass' }),
         row('Blur strength', 'Backdrop blur behind windows and the taskbar', range('blur', 0, 40, 2, (v) => v + 'px')),
         row('Window opacity', 'Lower values reveal more of the wallpaper', range('glassAlpha', 0.4, 0.98, 0.02, (v) => Math.round(v * 100) + '%')),
         h('h3', { text: 'Pointer' }),
-        row('Custom cursor', 'SVG cursor with a trailing ring (not shown inside embedded apps)', sw('cursor'))),
+        row('Custom cursor', 'SVG cursor with a trailing ring (not shown inside embedded apps)', sw('cursor')),
+        row('Cursor style', '“Random” picks one each sign-in; the accent color tints Neon, Dot and Crosshair', choose('cursorStyle', CURSOR_STYLES, 'Random each sign-in'))),
       desktop: h('div', {},
         h('h3', { text: 'Icons' }),
         row('Icon size', null, seg('iconSize', ['small', 'medium', 'large'])),
+        row('Icon style', 'Look of the desktop icon tiles — “Random” picks one each sign-in', choose('iconStyle', ICON_STYLES, 'Random each sign-in')),
         row('Fetch website favicons', 'Custom shortcuts request a favicon from Google’s favicon service', sw('favicons', () => Desktop.render())),
         row('Auto-arrange', 'Pack icons into the grid from the top-left', h('button', { class: 'btn sm', text: 'Arrange now', onclick: autoArrange })),
         row('Restore stock icons', 'Bring back deleted default icons', h('button', { class: 'btn sm', text: 'Restore', onclick: () => { missingDefaults().length ? restoreDefaults() : ui.toast('All stock icons are already on the desktop'); } })),
-        h('h3', { text: 'Taskbar' }),
+        h('h3', { text: 'Clock' }),
         row('Show seconds in clock', null, sw('clockSeconds'))),
+      shell: ulyOS.Shell.settingsSection({ row, sw, range, choose }),
       security: securitySection(),
       system: h('div', {},
         h('h3', { text: 'Storage' }),
@@ -867,7 +828,7 @@
           h('div', { text: 'OPFS: ' + (ulyOS.FS.roots.sandbox.handle ? 'ready' : 'unavailable') }),
           h('div', { text: 'Directory picker: ' + (window.showDirectoryPicker ? 'supported' : 'unsupported') }))),
     };
-    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System']];
+    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['shell', 'grid', 'Dock & Menu bar'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System']];
     const navBtns = {};
     const content = h('div', { class: 'set-content' });
     function show(id) {
@@ -886,9 +847,10 @@
   /* Runs once a profile has signed in (security.js emits session:start). */
   function startSession() {
     settings = { ...DEFAULT_SETTINGS, ...store.get('ulyos.settings', {}) };
+    if (settings.shuffleOnLogin) surprise(false);
     applySettings();
     Desktop.init();
-    Taskbar.init();
+    ulyOS.Shell.init();
     boot(true);
   }
   function init() {
@@ -896,6 +858,20 @@
     Cursor.init();
     bus.on('session:start', startSession);
   }
+  /** Shared with js/shell.js (taskbar, dock, menu bar, start menu). */
+  function catalog() {
+    const out = [];
+    Object.entries(SYS_APPS).forEach(([k, a]) => out.push({ id: k, name: a.name, rec: { id: k, kind: 'sys', sys: k, name: a.name }, appId: k, run: a.open }));
+    const seen = new Set(out.map((o) => o.id));
+    [...DEFAULT_ICONS.filter((d) => d.kind !== 'sys'), ...Desktop.icons.filter((i) => i.kind !== 'sys')].forEach((r) => {
+      if (seen.has(r.id)) return;
+      seen.add(r.id);
+      const live = Desktop.icons.find((i) => i.id === r.id) || r;
+      out.push({ id: r.id, name: live.name, rec: live, appId: 'web:' + r.id, run: () => launch(live) });
+    });
+    return out;
+  }
+  ulyOS.desktopApi = { launch, catalog, newShortcut: () => shortcutDialog(null), iconHTML, lockNow, restart, surprise, openSettings: (t) => SettingsApp.open(t), WALLPAPERS, applyWallpaper, Settings, setWallpaper: (id) => { eff = {}; Settings.set('wallpaper', id); applyWallpaper(); }, SYS_APPS };
   ulyOS.restart = restart;
   ulyOS.launch = launch;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

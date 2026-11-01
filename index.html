@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#000000">
+  <title>ulyOS</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23000'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23fff'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="booting">
+
+  <!-- Boot sequence -->
+  <div id="boot" aria-live="polite">
+    <div class="boot-core">
+      <svg class="boot-logo" viewBox="0 0 80 80" width="76" height="76" aria-hidden="true">
+        <circle class="ring" cx="40" cy="40" r="28" />
+        <circle class="dot" cx="40" cy="40" r="5" />
+      </svg>
+      <div class="boot-word">uly<span>OS</span></div>
+      <div id="boot-bar" class="boot-bar"><i></i></div>
+      <div id="boot-log" class="boot-log mono"></div>
+      <div class="boot-hint">press any key to skip</div>
+    </div>
+  </div>
+
+  <div id="wallpaper" class="wp-void"></div>
+
+  <main id="desktop" aria-label="Desktop"></main>
+  <div id="cell-hint"></div>
+
+  <div id="windows"></div>
+  <div id="snap-preview"></div>
+  <div id="drag-shield"></div>
+
+  <!-- Taskbar -->
+  <nav id="taskbar" aria-label="Taskbar">
+    <button id="tb-start" class="tb-start" aria-label="Start menu" aria-haspopup="true">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <div id="tb-tasks" class="tb-tasks"></div>
+    <div class="tb-tray">
+      <button id="tray-ram" class="tray-ram" title="Open Task Manager">
+        <span class="lbl">RAM</span><span class="v mono">— MB</span><span class="meter"><i></i></span>
+      </button>
+      <div id="tray-clock" class="tray-clock"></div>
+      <button id="tb-desk" class="tb-desk" title="Show desktop" aria-label="Show desktop"></button>
+    </div>
+  </nav>
+
+  <!-- Start menu -->
+  <div id="start-menu" hidden>
+    <div class="sm-search"><input id="sm-search" class="input" type="search" placeholder="Search apps…" autocomplete="off" spellcheck="false"></div>
+    <div id="sm-list" class="sm-list"></div>
+    <div class="sm-foot">
+      <button id="sm-fullscreen" class="btn sm">Fullscreen</button>
+      <button id="sm-restart" class="btn sm danger">Restart</button>
+    </div>
+  </div>
+
+  <div id="overlay-root"></div>
+  <div id="cursor-ring" class="hidden"></div>
+
+  <noscript><p style="color:#fff;padding:2rem">ulyOS needs JavaScript.</p></noscript>
+
+  <script src="js/window.js"></script>
+  <script src="js/telemetry.js"></script>
+  <script src="js/filesystem.js"></script>
+  <script src="js/desktop.js"></script>
+</body>
+</html>

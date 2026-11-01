@@ -17,10 +17,10 @@
   const DEFAULT_SETTINGS = {
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
-    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: false,
-    cursorStyle: 'classic', animStyle: 'scale', iconStyle: 'glass', shuffleOnLogin: false,
+    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true,
+    cursorStyle: 'classic', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // taskbar / dock / menu bar (see js/shell.js)
-    taskbarMode: 'bar', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
+    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
     showRam: true, showClock: true, menubar: false, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
   };
   let settings = { ...DEFAULT_SETTINGS };   // replaced with the profile's saved settings on sign-in
@@ -43,7 +43,7 @@
   ];
   const CURSOR_STYLES = [['classic', 'Classic arrow'], ['dot', 'Dot'], ['cross', 'Crosshair'], ['neon', 'Neon arrow'], ['ring', 'Ring'], ['system', 'System default']];
   const ANIM_STYLES = [['scale', 'Scale'], ['slide', 'Slide up'], ['fade', 'Fade'], ['zoom', 'Zoom'], ['bounce', 'Bounce'], ['blur', 'Blur in']];
-  const ICON_STYLES = [['glass', 'Glass'], ['flat', 'Flat'], ['outline', 'Outline'], ['circle', 'Circle'], ['neon', 'Neon'], ['gradient', 'Gradient']];
+  const ICON_STYLES = [['vivid', 'Colorful & animated'], ['glass', 'Glass'], ['flat', 'Flat'], ['outline', 'Outline'], ['circle', 'Circle'], ['neon', 'Neon'], ['gradient', 'Gradient']];
   const POOLS = { wallpaper: WALLPAPERS.map((w) => w[0]), cursorStyle: ['classic', 'dot', 'cross', 'neon', 'ring'], iconStyle: ICON_STYLES.map((i) => i[0]) };
   const rnd = (a) => a[Math.floor(Math.random() * a.length)];
   /* "random" settings resolve to one concrete pick that stays stable for the whole session */
@@ -220,6 +220,31 @@
   const hostName = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
   const hueOf = (s) => { let n = 0; for (const c of s) n = (n * 31 + c.charCodeAt(0)) % 360; return n; };
 
+  /* Brand-style gradients + animated artwork for the colorful icon style */
+  const GRADS = {
+    files: ['#4aa8ff', '#1d4ed8'], polotno: ['#b06cff', '#5b5bf0'], getartcraft: ['#ffb020', '#ef4444'], youtube: ['#ff4b4b', '#b91c1c'],
+    xrp: ['#22d3ee', '#2563eb'], outlook: ['#3aa0ff', '#0b5bc4'], qrseal: ['#a78bfa', '#ec4899'], systemvault: ['#fb7185', '#9f1239'],
+    cryptocompass: ['#fbbf24', '#d97706'], taskmgr: ['#34d399', '#047857'], settings: ['#94a3b8', '#475569'], trustvault: ['#5eead4', '#0f766e'],
+  };
+  function gradientOf(rec) {
+    if (GRADS[rec.id]) return GRADS[rec.id];
+    const hh = hueOf(hostName(rec.url || rec.name || 'x'));
+    return ['hsl(' + hh + ' 78% 60%)', 'hsl(' + ((hh + 35) % 360) + ' 80% 42%)'];
+  }
+  const ART = {
+    files: '<svg viewBox="0 0 48 48"><path d="M6 14a4 4 0 0 1 4-4h9l4 4h15a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#fff" fill-opacity=".55"/><path class="a-front" d="M6 21a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4v15a4 4 0 0 1-4 4H10a4 4 0 0 1-4-4z" fill="#fff"/></svg>',
+    settings: '<svg viewBox="0 0 48 48"><g class="a-gear"><circle cx="24" cy="24" r="14" fill="none" stroke="#fff" stroke-width="5.5" stroke-dasharray="3.6 3.66"/><circle cx="24" cy="24" r="10.5" fill="#fff"/></g><circle cx="24" cy="24" r="4.6" style="fill:var(--g2)"/></svg>',
+    taskmgr: '<svg viewBox="0 0 48 48"><rect x="5" y="9" width="38" height="30" rx="6" fill="#fff" fill-opacity=".22"/><path d="M8 27h8l4-11 6 20 5-14 3 5h6" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path class="a-pulse" d="M8 27h8l4-11 6 20 5-14 3 5h6" fill="none" stroke="#fff" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round" pathLength="100"/></svg>',
+    youtube: '<svg viewBox="0 0 48 48"><rect x="5" y="11" width="38" height="26" rx="8" fill="#fff"/><path class="a-play" d="M20 18v12l11-6z" style="fill:var(--g1)"/></svg>',
+    xrp: '<svg viewBox="0 0 48 48"><rect x="7" y="28" width="6" height="12" rx="2" fill="#fff" fill-opacity=".45"/><rect x="17" y="22" width="6" height="18" rx="2" fill="#fff" fill-opacity=".6"/><rect x="27" y="26" width="6" height="14" rx="2" fill="#fff" fill-opacity=".45"/><path class="a-trend" d="M6 30l11-9 8 6 14-15" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" pathLength="100"/><path d="M31 12h8v8" fill="none" stroke="#fff" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    outlook: '<svg viewBox="0 0 48 48"><rect x="6" y="12" width="36" height="26" rx="5" fill="#fff"/><path class="a-flap" d="M9 16.5l15 11.5 15-11.5" fill="none" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--g2)"/></svg>',
+    qrseal: '<svg viewBox="0 0 48 48"><rect x="7" y="7" width="14" height="14" rx="3" fill="#fff"/><rect x="27" y="7" width="14" height="14" rx="3" fill="#fff"/><rect x="7" y="27" width="14" height="14" rx="3" fill="#fff"/><rect x="11" y="11" width="6" height="6" rx="1.5" style="fill:var(--g2)"/><rect x="31" y="11" width="6" height="6" rx="1.5" style="fill:var(--g2)"/><rect x="11" y="31" width="6" height="6" rx="1.5" style="fill:var(--g2)"/><rect class="a-dot d1" x="27" y="27" width="6" height="6" rx="1.5" fill="#fff"/><rect class="a-dot d2" x="35" y="27" width="6" height="6" rx="1.5" fill="#fff"/><rect class="a-dot d3" x="27" y="35" width="6" height="6" rx="1.5" fill="#fff"/><rect class="a-dot d4" x="35" y="35" width="6" height="6" rx="1.5" fill="#fff"/><rect class="a-scan" x="4" y="6" width="40" height="2.6" rx="1.3" fill="#fff"/></svg>',
+    systemvault: '<svg viewBox="0 0 48 48"><g class="a-key"><circle cx="17" cy="31" r="8.5" fill="none" stroke="#fff" stroke-width="5"/><path d="M23.5 24.5L40 8M33 15l5.5 5.5M28 20l4.5 4.5" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round"/></g></svg>',
+    cryptocompass: '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="18" fill="none" stroke="#fff" stroke-width="3.6"/><g class="a-needle"><path d="M24 9l6.5 15h-13z" fill="#fff"/><path d="M24 39l-6.5-15h13z" fill="#fff" fill-opacity=".5"/></g><circle cx="24" cy="24" r="2.6" style="fill:var(--g2)"/></svg>',
+    polotno: '<svg viewBox="0 0 48 48"><rect class="a-f1" x="6" y="6" width="17" height="17" rx="4.5" fill="#fff"/><circle class="a-f2" cx="34" cy="15" r="9" fill="#fff" fill-opacity=".8"/><path class="a-f3" d="M23.5 42l9.5-16 9.5 16z" fill="#fff" fill-opacity=".92"/><rect x="6" y="28" width="12" height="12" rx="3" fill="#fff" fill-opacity=".4"/></svg>',
+    getartcraft: '<svg viewBox="0 0 48 48"><path class="a-s1" d="M22 5l3.6 10.4L36 19l-10.4 3.6L22 33l-3.6-10.4L8 19l10.4-3.6z" fill="#fff"/><path class="a-s2" d="M37 28l1.8 5.2L44 35l-5.2 1.8L37 42l-1.8-5.2L30 35l5.2-1.8z" fill="#fff" fill-opacity=".85"/><path class="a-s3" d="M11 33l1.2 3.4 3.4 1.2-3.4 1.2L11 42l-1.2-3.2L6.4 37.6l3.4-1.2z" fill="#fff" fill-opacity=".7"/></svg>',
+  };
+
   const SYS_APPS = {
     files: { name: 'Files', icon: 'folder', open: () => ulyOS.FS.open() },
     taskmgr: { name: 'Task Manager', icon: 'activity', open: () => ulyOS.Telemetry.open() },
@@ -334,6 +359,7 @@
     Desktop.icons.forEach((ic, i) => {
       if (ic.col == null) { const [c, r] = nextFree(); ic.col = c; ic.row = r; }
       const el = buildIcon(ic);
+      el.style.setProperty('--bd', -(i * 0.9) + 's');
       if (animateIn) { el.classList.add('pop-in'); el.style.animationDelay = 120 + i * 60 + 'ms'; }
       host.append(el);
       Desktop.els.set(ic.id, el);
@@ -343,10 +369,16 @@
   };
 
   function buildIcon(ic) {
-    const tile = h('div', { class: 'di-tile', html: ic.kind === 'sys' || ic.glyph ? iconHTML(ic, 26) : iconHTML(ic, 30), style: ic.tint ? { '--tint': ic.tint } : null });
+    const art = ART[ic.id];
+    const [g1, g2] = gradientOf(ic);
+    const tile = h('div', {
+      class: 'di-tile' + (art ? ' has-art' : ''),
+      html: '<span class="glyph">' + (ic.kind === 'sys' || ic.glyph ? iconHTML(ic, 26) : iconHTML(ic, 30)) + '</span>' + (art ? '<span class="art">' + art + '</span>' : ''),
+      style: { '--g1': g1, '--g2': g2, ...(ic.tint ? { '--tint': ic.tint } : {}) },
+    });
     const el = h('div', { class: 'desk-icon', tabindex: 0, role: 'button', 'aria-label': ic.name, dataset: { id: ic.id } },
       tile, h('div', { class: 'di-label', text: ic.name }));
-    el.addEventListener('dblclick', () => { launch(ic); ulyOS.audit("Launching '" + ic.name + "' from desktop", 'info'); });
+    el.addEventListener('dblclick', () => { el.classList.add('launching'); setTimeout(() => el.classList.remove('launching'), 1300); launch(ic); ulyOS.audit("Launching '" + ic.name + "' from desktop", 'info'); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter') launch(ic); });
     el.addEventListener('pointerdown', (e) => beginIconDrag(ic, el, e));
     el.addEventListener('contextmenu', (e) => {
@@ -647,7 +679,8 @@
       document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     };
     const row = (label, desc, ctl) => h('div', { class: 'set-row' }, h('div', {}, h('div', { class: 'set-label', text: label }), desc ? h('div', { class: 'set-desc', text: desc }) : null), ctl);
-    const credField = [{ name: 'type', label: 'Type', type: 'select', value: 'password', options: [{ value: 'password', label: 'Password (recommended)' }, { value: 'pin', label: 'PIN (digits only — weaker)' }] }];
+    const credFieldFor = (pwc) => [{ name: 'type', label: 'Type', type: 'select', value: 'password', onchange: (v) => pwc.setMode(v), options: [{ value: 'password', label: 'Password (recommended)' }, { value: 'pin', label: 'PIN (digits only — weaker)' }] }];
+    const secretFields = (pwc) => [{ name: 'pw', type: 'custom', node: pwc.el, get: pwc.value, focus: pwc.focus }, { name: 'pw2', type: 'custom', get: pwc.confirm }];
     const validateNew = (v) => {
       if (v.type === 'pin' ? !/^\d{4,12}$/.test(v.pw) : v.pw.length < 8) return v.type === 'pin' ? 'PIN must be 4–12 digits' : 'Use at least 8 characters';
       if (v.pw !== v.pw2) return 'Entries do not match';
@@ -675,14 +708,15 @@
         row(prot ? 'Change ' + (p.cred === 'pin' ? 'PIN' : 'password') : 'Set a password', prot ? 'Re-encrypts the vault with a fresh salt' : 'Encrypts this profile’s settings, app data and audit log',
           h('div', { class: 'btn-row' },
             h('button', { class: 'btn sm primary', text: prot ? 'Change…' : 'Set password…', onclick: async () => {
+              const pwc = ui.passwordInput();
               const v = await ui.form({ title: prot ? 'Change password' : 'Set a password', message: prot ? null : 'There is no recovery. If you forget it, the encrypted data cannot be restored — export a backup below.',
-                fields: [...(prot ? [{ name: 'old', label: 'Current ' + (p.cred === 'pin' ? 'PIN' : 'password'), type: 'password' }] : []), ...credField, { name: 'pw', label: 'New secret', type: 'password' }, { name: 'pw2', label: 'Confirm', type: 'password' }],
+                fields: [...(prot ? [{ name: 'old', label: 'Current ' + (p.cred === 'pin' ? 'PIN' : 'password'), type: 'password' }] : []), ...credFieldFor(pwc), ...secretFields(pwc)],
                 okText: 'Save', validate: (x) => (prot && !x.old ? 'Enter your current secret' : validateNew(x)) });
               if (!v) return;
               try { await sec.changeSecret(prot ? v.old : null, v.pw, v.type); ui.toast('Vault re-encrypted', { type: 'ok' }); bus.emit('profile:change'); paint(); }
               catch (err) { ui.toast(err.message, { type: 'err' }); }
             } }),
-            h('button', { class: 'btn sm', text: 'Suggest', title: 'Generate a strong random password', onclick: () => ui.form({ title: 'Generated password', message: ulyOS.crypto.generatePassword(24) + '\n\nSelect and copy it, then use “Set password”. It is not saved anywhere.', fields: [], okText: 'Done', hideCancel: true }) }))),
+          )),
         prot ? row('Remove password', 'Stores the vault unencrypted', h('button', { class: 'btn sm danger', text: 'Remove…', onclick: async () => {
           const v = await ui.form({ title: 'Remove password?', message: 'The vault will be saved unencrypted and locking is disabled.', fields: [{ name: 'old', label: 'Current secret', type: 'password' }], okText: 'Remove', danger: true, validate: (x) => (x.old ? null : 'Required') });
           if (!v) return;
@@ -692,8 +726,9 @@
         row('Lock now', null, h('button', { class: 'btn sm', html: icon('lock', 14) + ' Lock', onclick: lockNow })),
         h('h3', { text: 'Backup' }),
         row('Export encrypted profile', 'Settings, desktop layout, audit log and app data (not sandbox files) as a .ulyprofile file', h('button', { class: 'btn sm', html: icon('download', 14) + ' Export…', onclick: async () => {
+          const pwc = ui.passwordInput();
           const v = await ui.form({ title: 'Encrypt backup', message: 'Choose the password that will protect the backup file. Restoring it creates a profile protected with this password.',
-            fields: [{ name: 'pw', label: 'Backup password', type: 'password' }, { name: 'pw2', label: 'Confirm', type: 'password' }], okText: 'Export',
+            fields: secretFields(pwc), okText: 'Export',
             validate: (x) => (x.pw.length < 8 ? 'Use at least 8 characters' : x.pw !== x.pw2 ? 'Entries do not match' : null) });
           if (!v) return;
           try { download(await sec.exportProfile(v.pw), p.name.replace(/[^\w.-]+/g, '_') + '-' + new Date().toISOString().slice(0, 10) + '.ulyprofile'); ulyOS.audit('Encrypted profile backup exported', 'ok'); ui.toast('Encrypted backup saved', { type: 'ok' }); }
@@ -711,6 +746,92 @@
     bus.on('profile:change', () => { if (wrap.isConnected) paint(); });
     paint();
     return wrap;
+  }
+
+  /* ---- Settings export / import (appearance, dock & menu bar, desktop icon layout) ---- */
+  const HEX = /^#[0-9a-f]{6}$/i;
+  function sanitizeSettings(src) {
+    const out = {};
+    const D = DEFAULT_SETTINGS;
+    const oneOf = (v, list) => list.includes(v);
+    for (const k of Object.keys(D)) {
+      if (!(k in src)) continue;
+      const v = src[k], dv = D[k];
+      if (k === 'pinned') { if (Array.isArray(v)) out[k] = v.filter((x) => typeof x === 'string' && /^[\w-]{1,40}$/.test(x)).slice(0, 40); continue; }
+      if (typeof v !== typeof dv) continue;
+      if (typeof dv === 'number') { out[k] = Number.isFinite(v) ? v : dv; continue; }
+      out[k] = v;
+    }
+    const clampKey = (k, lo, hi) => { if (k in out) out[k] = clamp(out[k], lo, hi); };
+    clampKey('animSpeed', 0.25, 3); clampKey('blur', 0, 60); clampKey('glassAlpha', 0.3, 1); clampKey('taskbarSize', 36, 84);
+    ['accent', 'wallpaperColor'].forEach((k) => { if (k in out && !HEX.test(out[k])) delete out[k]; });
+    if ('wallpaper' in out && !oneOf(out.wallpaper, [...POOLS.wallpaper, 'solid', 'custom', 'random'])) delete out.wallpaper;
+    if ('cursorStyle' in out && !oneOf(out.cursorStyle, [...CURSOR_STYLES.map((c) => c[0]), 'random'])) delete out.cursorStyle;
+    if ('animStyle' in out && !oneOf(out.animStyle, [...ANIM_STYLES.map((c) => c[0]), 'random'])) delete out.animStyle;
+    if ('iconStyle' in out && !oneOf(out.iconStyle, [...ICON_STYLES.map((c) => c[0]), 'random'])) delete out.iconStyle;
+    if ('iconSize' in out && !oneOf(out.iconSize, ['small', 'medium', 'large'])) delete out.iconSize;
+    if ('taskbarMode' in out && !oneOf(out.taskbarMode, ['bar', 'dock'])) delete out.taskbarMode;
+    if ('taskbarPos' in out && !oneOf(out.taskbarPos, ['bottom', 'top', 'left', 'right'])) delete out.taskbarPos;
+    if ('menubarStyle' in out && !oneOf(out.menubarStyle, ['glass', 'solid'])) delete out.menubarStyle;
+    // a custom wallpaper only travels if it is a plain web URL (uploaded images live in this browser's sandbox)
+    const wpc = normalizeUrl(out.wallpaperCustom || '');
+    out.wallpaperCustom = wpc || '';
+    if (out.wallpaper === 'custom' && !wpc) out.wallpaper = 'void';
+    return out;
+  }
+  function sanitizeIcons(list) {
+    if (!Array.isArray(list)) return null;
+    const out = [];
+    const used = new Set();
+    for (const r of list.slice(0, 120)) {
+      if (!r || typeof r.id !== 'string' || !/^[\w-]{1,40}$/.test(r.id) || used.has(r.id)) continue;
+      const stock = DEFAULT_ICONS.find((d) => d.id === r.id);
+      const base = stock ? { ...stock } : null;
+      const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 40) : (base ? base.name : null);
+      if (!name) continue;
+      let rec;
+      if (base && base.kind !== 'url') rec = { ...base, name };                         // sys / local: trusted record only
+      else {
+        const url = normalizeUrl(r.url || (base && base.url) || '');
+        if (!url) continue;
+        rec = { ...(base || { id: r.id, kind: 'url' }), name, url, mode: ['auto', 'window', 'tab'].includes(r.mode) ? r.mode : (base?.mode || 'auto') };
+      }
+      rec.col = Number.isInteger(r.col) && r.col >= 0 && r.col < 200 ? r.col : undefined;
+      rec.row = Number.isInteger(r.row) && r.row >= 0 && r.row < 200 ? r.row : undefined;
+      used.add(r.id); out.push(rec);
+    }
+    return out;
+  }
+  function exportSettings() {
+    const prof = ulyOS.security.profile();
+    const data = {
+      format: 'ulyOS-settings', v: 1, exported: new Date().toISOString(), profile: prof ? prof.name : '',
+      settings: { ...settings, wallpaperCustom: String(settings.wallpaperCustom || '').startsWith('opfs:') ? '' : settings.wallpaperCustom },
+      icons: Desktop.icons.map((i) => ({ id: i.id, kind: i.kind, name: i.name, url: i.url, mode: i.mode, col: i.col, row: i.row })),
+    };
+    if (String(settings.wallpaperCustom || '').startsWith('opfs:') && settings.wallpaper === 'custom') data.settings.wallpaper = 'void';
+    const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'ulyOS-settings-' + (prof ? prof.name.replace(/[^\w.-]+/g, '_') : 'profile') + '-' + new Date().toISOString().slice(0, 10) + '.json' });
+    document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    ulyOS.audit('Settings exported (' + Object.keys(data.settings).length + ' options, ' + data.icons.length + ' desktop icons)', 'ok');
+    ui.toast('Settings exported — import the file on another device to copy this setup', { type: 'ok', timeout: 4500 });
+  }
+  async function importSettings(file) {
+    let obj;
+    try { obj = JSON.parse(await file.text()); } catch { ui.toast('That is not a valid settings file', { type: 'err' }); return; }
+    if (!obj || obj.format !== 'ulyOS-settings' || typeof obj.settings !== 'object' || !obj.settings) { ui.toast('Not a ulyOS settings export', { type: 'err' }); return; }
+    const clean = sanitizeSettings(obj.settings);
+    const icons = sanitizeIcons(obj.icons);
+    const ok = await ui.confirm({
+      title: 'Import settings?', okText: 'Import',
+      message: 'Applies ' + Object.keys(clean).length + ' options' + (icons ? ' and the layout of ' + icons.length + ' desktop icons' : '') + (obj.profile ? ' exported from “' + String(obj.profile).slice(0, 30) + '”' : '') + '. Files, passwords and app data are not touched.',
+    });
+    if (!ok) return;
+    eff = {};
+    Settings.patch(clean);
+    if (icons) { Desktop.icons = icons; saveIcons(); Desktop.render(); }
+    await applyWallpaper();
+    ulyOS.audit('Settings imported (' + Object.keys(clean).length + ' options' + (icons ? ', ' + icons.length + ' icons' : '') + ')', 'ok');
+    ui.toast('Settings imported', { type: 'ok' });
   }
 
   function buildSettings(win, startTab) {
@@ -838,7 +959,18 @@
     win.showTab = show;
     const nav = h('nav', { class: 'set-nav' }, navDefs.map(([id, ico, label]) => (navBtns[id] = h('button', { class: 'place', html: icon(ico, 16) + '<span>' + label + '</span>', onclick: () => show(id) }))));
     show(startTab);
-    return h('div', { class: 'settings' }, nav, content);
+
+    /* footer: autosave status + save / export / import */
+    const saved = h('span', { class: 'set-saved' }, h('b', { text: '✓' }), ' All changes are saved automatically to this profile');
+    const stamp = () => { saved.replaceChildren(h('b', { text: '✓' }), ' Saved ' + ulyOS.util.fmtTime(Date.now()) + ' · stored in this profile' + (ulyOS.security.isProtected() ? ' (encrypted)' : '')); };
+    const offs = bus.on('settings:change', stamp);
+    win.onClose = () => offs();
+    const importIn = h('input', { type: 'file', accept: '.json,application/json', hidden: true, onchange: async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) await importSettings(f); } });
+    const foot = h('div', { class: 'set-foot' }, saved, h('span', { class: 'grow' }),
+      h('button', { class: 'btn sm', html: icon('save', 14) + ' Save now', title: 'Write everything to the profile vault immediately', onclick: async () => { await ulyOS.vault.flush(); stamp(); ui.toast('Saved', { type: 'ok', timeout: 1600 }); } }),
+      h('button', { class: 'btn sm', html: icon('download', 14) + ' Export settings', title: 'Download appearance, dock and icon layout as a file', onclick: exportSettings }),
+      h('button', { class: 'btn sm', html: icon('upload', 14) + ' Import settings', title: 'Load a settings file exported from another device', onclick: () => importIn.click() }), importIn);
+    return h('div', { class: 'settings' }, nav, h('div', { class: 'set-main' }, content, foot));
   }
 
   /* ==========================================================================
@@ -847,6 +979,10 @@
   /* Runs once a profile has signed in (security.js emits session:start). */
   function startSession() {
     settings = { ...DEFAULT_SETTINGS, ...store.get('ulyos.settings', {}) };
+    if (!store.get('ulyos.migr.defaults2', false)) {   // one-time: new defaults (seconds clock, floating dock, colorful icons)
+      Object.assign(settings, { clockSeconds: true, taskbarMode: 'dock', iconStyle: 'vivid' });
+      store.set('ulyos.settings', settings); store.set('ulyos.migr.defaults2', true);
+    }
     if (settings.shuffleOnLogin) surprise(false);
     applySettings();
     Desktop.init();
@@ -871,7 +1007,7 @@
     });
     return out;
   }
-  ulyOS.desktopApi = { launch, catalog, newShortcut: () => shortcutDialog(null), iconHTML, lockNow, restart, surprise, openSettings: (t) => SettingsApp.open(t), WALLPAPERS, applyWallpaper, Settings, setWallpaper: (id) => { eff = {}; Settings.set('wallpaper', id); applyWallpaper(); }, SYS_APPS };
+  ulyOS.desktopApi = { launch, catalog, iconGradient: gradientOf, exportSettings, newShortcut: () => shortcutDialog(null), iconHTML, lockNow, restart, surprise, openSettings: (t) => SettingsApp.open(t), WALLPAPERS, applyWallpaper, Settings, setWallpaper: (id) => { eff = {}; Settings.set('wallpaper', id); applyWallpaper(); }, SYS_APPS };
   ulyOS.restart = restart;
   ulyOS.launch = launch;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

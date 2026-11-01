@@ -20,7 +20,7 @@
   const Shell = (ulyOS.Shell = {});
 
   const LAYOUT_DEFAULTS = {
-    taskbarMode: 'bar', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
+    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
     showRam: true, showClock: true, menubar: false, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
   };
 
@@ -231,6 +231,8 @@
       el.title = title + (ws.length > 1 ? ' (' + ws.length + ' windows)' : '');
       const ti = el.querySelector('.tb-title');
       if (ti.textContent !== title) ti.textContent = title;
+      if (it.pinned) { const [g1, g2] = API().iconGradient(it.app.rec); el.style.setProperty('--g1', g1); el.style.setProperty('--g2', g2); el.dataset.g = '1'; }
+      else { el.style.removeProperty('--g1'); el.style.removeProperty('--g2'); delete el.dataset.g; }
       const ic = it.pinned ? API().iconHTML(it.app.rec, 16) : it.icon;
       const ico = el.querySelector('.tb-ico');
       if (ico._h !== ic) { ico.innerHTML = ic; ico._h = ic; }
@@ -244,17 +246,32 @@
   /* dock magnification + auto-hide */
   function initDock() {
     const tb = $('#taskbar');
+    /* Magnification that pushes neighbours apart (like macOS): every icon is scaled by its distance
+       to the pointer, then re-centred along the dock axis so scaled icons never overlap. */
+    const MAXS = 1.5, SIGMA = 62, GAP = 6;
     tb.addEventListener('pointermove', (e) => {
       if (!tb.classList.contains('mag')) return;
       const horiz = tb.dataset.pos === 'top' || tb.dataset.pos === 'bottom';
-      [$('#tb-start'), ...$$('.tb-item', tb)].forEach((el) => {
-        const r = el.getBoundingClientRect();
-        const c = horiz ? r.left + r.width / 2 : r.top + r.height / 2;
-        const d = Math.abs((horiz ? e.clientX : e.clientY) - c);
-        el.style.setProperty('--mag', (1 + 0.55 * Math.exp(-(d * d) / (2 * 66 * 66))).toFixed(3));
+      const els = [$('#tb-start'), ...$$('.tb-item', tb)];
+      const box = tb.getBoundingClientRect();
+      const pointer = horiz ? e.clientX - box.left : e.clientY - box.top;
+      const m = els.map((el) => {
+        const p = horiz ? el.offsetLeft : el.offsetTop, w = horiz ? el.offsetWidth : el.offsetHeight;
+        const d = Math.abs(pointer - (p + w / 2));
+        return { el, p, w, s: 1 + (MAXS - 1) * Math.exp(-(d * d) / (2 * SIGMA * SIGMA)) };
+      });
+      const origSpan = m[m.length - 1].p + m[m.length - 1].w - m[0].p;
+      const newSpan = m.reduce((a, x) => a + x.w * x.s, 0) + GAP * (m.length - 1);
+      let cur = m[0].p - (newSpan - origSpan) / 2;
+      m.forEach((x) => {
+        const nw = x.w * x.s;
+        const shift = cur + nw / 2 - (x.p + x.w / 2);
+        x.el.style.setProperty('--mag', x.s.toFixed(3));
+        x.el.style.setProperty(horiz ? '--tx' : '--ty', shift.toFixed(1) + 'px');
+        cur += nw + GAP;
       });
     });
-    tb.addEventListener('pointerleave', () => [$('#tb-start'), ...$$('.tb-item', tb)].forEach((el) => el.style.removeProperty('--mag')));
+    tb.addEventListener('pointerleave', () => [$('#tb-start'), ...$$('.tb-item', tb)].forEach((el) => { el.style.removeProperty('--mag'); el.style.removeProperty('--tx'); el.style.removeProperty('--ty'); }));
 
     let hideT = 0;
     const busy = () => !!($('#start-menu.open') || $('.ctx-menu'));

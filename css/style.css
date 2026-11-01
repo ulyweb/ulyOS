@@ -269,7 +269,7 @@ body.tb-autohide #tb-hot { display: block; }
 #taskbar[data-pos=left] .tb-item::after, #taskbar[data-pos=right] .tb-item::after { bottom: auto; top: 50%; width: 2px; height: 6px; transform: translateY(-50%); }
 #taskbar[data-pos=left] .tb-item::after { left: 2px; right: auto; } #taskbar[data-pos=right] .tb-item::after { left: auto; right: 2px; }
 #taskbar[data-pos=left] .tb-item.active::after, #taskbar[data-pos=right] .tb-item.active::after { width: 2px; height: 16px; }
-#taskbar.mag .tb-item, #taskbar.mag .tb-start { transform: scale(var(--mag, 1)); transform-origin: var(--mag-origin, 50% 100%); transition: transform .08s linear, background .15s; z-index: 1; }
+#taskbar.mag .tb-item, #taskbar.mag .tb-start { transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(var(--mag, 1)); transform-origin: var(--mag-origin, 50% 100%); transition: transform .07s linear, background .15s; z-index: 1; }
 #taskbar.mag[data-pos=top] { --mag-origin: 50% 0%; } #taskbar.mag[data-pos=bottom] { --mag-origin: 50% 100%; }
 #taskbar.mag[data-pos=left] { --mag-origin: 0% 50%; } #taskbar.mag[data-pos=right] { --mag-origin: 100% 50%; }
 #taskbar.mag .tb-tasks { overflow: visible; }
@@ -502,7 +502,10 @@ body:not(.authed) #menubar, body.locked #menubar { visibility: hidden; }
    Settings
    ========================================================================== */
 .settings { flex: 1; display: flex; min-height: 0; }
-.set-content { flex: 1; min-width: 0; overflow: auto; padding: 8px 24px 24px; }
+.set-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.set-foot { flex: none; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px 16px; border-top: 1px solid var(--border); background: rgba(0, 0, 0, .22); }
+.set-saved { font-size: 12px; color: var(--muted); } .set-saved b { color: var(--ok); }
+.set-content { flex: 1; min-height: 0; min-width: 0; overflow: auto; padding: 8px 24px 24px; }
 .set-content h3 { margin: 22px 0 8px; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); font-weight: 500; }
 .set-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 11px 0; border-bottom: 1px solid rgba(255, 255, 255, .05); }
 .set-label { font-size: 13px; } .set-desc { font-size: 11.5px; color: var(--faint); margin-top: 2px; }
@@ -639,3 +642,66 @@ body[data-icons=gradient] .di-tile { background: linear-gradient(145deg, color-m
   .fm-head, .fm-row { grid-template-columns: minmax(120px, 1fr) 80px; } .c-mtime, .c-kind { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { body:not(.force-anim) * { animation-duration: .01ms !important; } }
+
+
+/* ==========================================================================
+   Password widget (generator + live length / entropy)
+   ========================================================================== */
+.pwc { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.pwc .field-label { margin: 0; }
+.pwc .meter { margin-top: 2px; }
+.meter-txt.dim { color: var(--faint); min-height: 0; }
+.gen { display: flex; flex-direction: column; gap: 9px; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .03); border: 1px solid var(--border); }
+.gen-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+.gen-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.gen-row .mono { min-width: 22px; text-align: right; color: var(--text); }
+.gen-opts { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.opt { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ==========================================================================
+   Colorful, animated icon style (default)  body[data-icons=vivid]
+   ========================================================================== */
+.di-tile .art { display: none; }
+.di-tile .art svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.art svg * { transform-box: fill-box; transform-origin: center; }
+body[data-icons=vivid] .di-tile { position: relative; overflow: hidden; background: linear-gradient(150deg, var(--g1), var(--g2)); border: 1px solid rgba(255, 255, 255, .3); color: #fff; backdrop-filter: none;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--g2) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -10px 16px rgba(0, 0, 0, .18);
+  transition: transform .25s var(--ease), box-shadow .25s; animation: tile-bob 5.5s ease-in-out infinite; animation-delay: var(--bd, 0s); }
+body[data-icons=vivid] .di-tile::after { content: ""; position: absolute; inset: -40% -60%; pointer-events: none; background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .5) 50%, transparent 60%); transform: translateX(-85%); transition: transform .75s var(--ease); }
+body[data-icons=vivid] .desk-icon:hover .di-tile { transform: translateY(-5px) scale(1.09); box-shadow: 0 20px 38px color-mix(in srgb, var(--g2) 70%, transparent), inset 0 1px 0 rgba(255, 255, 255, .6), inset 0 -10px 16px rgba(0, 0, 0, .15); }
+body[data-icons=vivid] .desk-icon:hover .di-tile::after { transform: translateX(85%); }
+body[data-icons=vivid] .desk-icon:active .di-tile { transform: scale(.94); }
+body[data-icons=vivid] .di-tile.has-art .art { display: block; width: 72%; height: 72%; }
+body[data-icons=vivid] .di-tile.has-art .glyph { display: none; }
+body[data-icons=vivid] .di-tile .letter-ico { box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+@keyframes tile-bob { 50% { translate: 0 -3px; } }
+.desk-icon.launching .di-tile { animation: tile-launch .6s cubic-bezier(.3, 0, .4, 1) 2 !important; }
+@keyframes tile-launch { 0%, 100% { translate: 0 0; } 40% { translate: 0 -17px; } 65% { translate: 0 0; } 82% { translate: 0 -6px; } }
+
+@keyframes a-spin { to { rotate: 360deg; } }
+@keyframes a-run { from { stroke-dashoffset: 100; } to { stroke-dashoffset: 0; } }
+@keyframes a-beat { 50% { scale: 1.2; } }
+@keyframes a-draw { 0% { stroke-dashoffset: 100; } 55%, 100% { stroke-dashoffset: 0; } }
+@keyframes a-blink { 50% { opacity: .22; } }
+@keyframes a-scan { 0%, 100% { translate: 0 0; } 50% { translate: 0 34px; } }
+@keyframes a-sway { 50% { rotate: -16deg; } }
+@keyframes a-swing { 0%, 100% { rotate: -38deg; } 50% { rotate: 52deg; } }
+@keyframes a-float { 50% { translate: 0 -3.5px; } }
+@keyframes a-twinkle { 50% { scale: .72; opacity: .6; } }
+.a-gear { animation: a-spin 14s linear infinite; } .desk-icon:hover .a-gear { animation-duration: 2.2s; }
+.a-pulse { stroke-dasharray: 38 62; animation: a-run 2.2s linear infinite; }
+.a-play { animation: a-beat 2.4s ease-in-out infinite; }
+.a-trend { stroke-dasharray: 100; animation: a-draw 3.2s ease-in-out infinite; }
+.a-flap { transform-origin: 50% 0; transition: transform .35s var(--ease); } .desk-icon:hover .a-flap { transform: translateY(-3px) scaleY(.8); }
+.a-front { transform-origin: 50% 100%; transition: transform .35s var(--ease); } .desk-icon:hover .a-front { transform: skewX(-7deg) translateY(1.5px) scaleY(.92); }
+.a-dot { animation: a-blink 1.8s ease-in-out infinite; } .a-dot.d2 { animation-delay: .3s; } .a-dot.d3 { animation-delay: .6s; } .a-dot.d4 { animation-delay: .9s; }
+.a-scan { animation: a-scan 2.4s ease-in-out infinite; }
+.a-key { animation: a-sway 4s ease-in-out infinite; } .desk-icon:hover .a-key { animation-duration: 1s; }
+.a-needle { animation: a-swing 5s ease-in-out infinite; }
+.a-f1 { animation: a-float 3.6s ease-in-out infinite; } .a-f2 { animation: a-float 3.6s ease-in-out 1.2s infinite; } .a-f3 { animation: a-float 3.6s ease-in-out 2.2s infinite; }
+.a-s1 { animation: a-twinkle 2.6s ease-in-out infinite; } .a-s2 { animation: a-twinkle 2.6s ease-in-out .8s infinite; } .a-s3 { animation: a-twinkle 2.6s ease-in-out 1.6s infinite; }
+
+/* colorful pinned apps in the floating dock */
+body[data-icons=vivid] #taskbar.icons-only .tb-item[data-g] { background: linear-gradient(150deg, var(--g1), var(--g2)); border-color: rgba(255, 255, 255, .3); color: #fff; box-shadow: 0 6px 16px color-mix(in srgb, var(--g2) 50%, transparent), inset 0 1px 0 rgba(255, 255, 255, .5); }
+body[data-icons=vivid] #taskbar.icons-only .tb-item[data-g]:hover { filter: brightness(1.12); }
+body[data-icons=vivid] #taskbar[data-mode=dock] .tb-start { background: linear-gradient(150deg, #9db0ff, #6d5df0); border-color: rgba(255, 255, 255, .3); box-shadow: 0 6px 16px rgba(109, 93, 240, .45), inset 0 1px 0 rgba(255, 255, 255, .5); }

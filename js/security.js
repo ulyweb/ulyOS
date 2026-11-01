@@ -63,14 +63,30 @@
     do { crypto.getRandomValues(b); } while (b[0] >= lim);
     return b[0] % n;
   }
-  function generatePassword(len = 20) {
-    const sets = ['abcdefghijkmnopqrstuvwxyz', 'ABCDEFGHJKLMNPQRSTUVWXYZ', '23456789', '!@#$%^&*()-_=+[]{};:,.?'];
+  function generatePassword(len = 20, o = {}) {
+    const on = { lower: true, upper: true, digits: true, symbols: true, ...o };
+    const sets = [];
+    if (on.lower) sets.push('abcdefghijkmnopqrstuvwxyz');
+    if (on.upper) sets.push('ABCDEFGHJKLMNPQRSTUVWXYZ');
+    if (on.digits) sets.push('23456789');
+    if (on.symbols) sets.push('!@#$%^&*()-_=+[]{};:,.?');
+    if (!sets.length) sets.push('abcdefghijkmnopqrstuvwxyz');
     const all = sets.join('');
     for (;;) {
       let out = '';
       for (let i = 0; i < len; i++) out += all[randInt(all.length)];
-      if (sets.every((s) => [...out].some((c) => s.includes(c)))) return out;
+      if (len < sets.length || sets.every((s) => [...out].some((c) => s.includes(c)))) return { password: out, pool: all.length, bits: Math.round(len * Math.log2(all.length)) };
     }
+  }
+  function generatePin(len = 8) { let out = ''; for (let i = 0; i < len; i++) out += randInt(10); return out; }
+  function crackTime(bits) {
+    const sec = Math.pow(2, bits) / 1e10;   // average case would be half this
+    if (sec < 1) return 'instantly';
+    const units = [[60, 'second'], [60, 'minute'], [24, 'hour'], [365, 'day'], [1000, 'year'], [1000, 'thousand years'], [1000, 'million years'], [1000, 'billion years']];
+    let v = sec, label = 'second';
+    for (let i = 0; i < units.length - 1; i++) { if (v < units[i][0]) break; v /= units[i][0]; label = units[i + 1][1]; }
+    if (label === 'billion years' && v > 1e6) return 'longer than the age of the universe';
+    return '≈ ' + (v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(v >= 10 ? 0 : 1)) + ' ' + label + (/^(second|minute|hour|day|year)$/.test(label) && Math.round(v) !== 1 ? 's' : '');
   }
   const COMMON = /^(password|passw0rd|123456|1234567|12345678|qwerty|letmein|admin|welcome|iloveyou|monkey|dragon|abc123|trustno1)/i;
   function strength(pw) {
@@ -112,7 +128,7 @@
     const n = (plain[0] << 8) | plain[1];
     return { name: dec.decode(plain.slice(2, 2 + n)), data: plain.slice(2 + n) };
   }
-  ulyOS.crypto = { b64, rand, deriveKey, strength, generatePassword, encryptFile, decryptFile, ITER, hasCrypto };
+  ulyOS.crypto = { b64, rand, deriveKey, strength, generatePassword, generatePin, crackTime, encryptFile, decryptFile, ITER, hasCrypto };
 
   /* ------------------------------------------------------------------------
      Profile registry (names/colors are public; data is in the vault)
@@ -333,6 +349,73 @@
     return m ? html.slice(0, m.index + m[0].length) + shim + html.slice(m.index + m[0].length) : shim + html;
   }
 
+
+  /* ==========================================================================
+     Reusable password / PIN field with generator, live length + entropy meter
+     ========================================================================== */
+  function passwordInput(o = {}) {
+    let mode = o.mode || 'password';
+    let generated = null;   // {len, pool, bits} while the field still holds a generated value
+    const pw = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', placeholder: 'Password', 'aria-label': 'Password' });
+    const pw2 = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', placeholder: 'Confirm', 'aria-label': 'Confirm password' });
+    const eye = h('button', { type: 'button', class: 'btn sm', text: 'Show', onclick: () => { const t = pw.type === 'password' ? 'text' : 'password'; pw.type = t; pw2.type = t; eye.textContent = t === 'password' ? 'Show' : 'Hide'; } });
+    const meter = h('div', { class: 'meter' }, h('i'));
+    const info = h('div', { class: 'meter-txt mono' });
+    const crack = h('div', { class: 'meter-txt mono dim' });
+    const lenOut = h('span', { class: 'mono', text: '20' });
+    const len = h('input', { type: 'range', min: 8, max: 64, value: 20, oninput: () => { lenOut.textContent = len.value; } });
+    const opt = (k, label, on = true) => { const c = h('input', { type: 'checkbox', checked: on }); return { k, c, el: h('label', { class: 'opt' }, c, label) }; };
+    const opts = [opt('lower', 'a-z'), opt('upper', 'A-Z'), opt('digits', '0-9'), opt('symbols', '!@#')];
+    const optsRow = h('div', { class: 'gen-opts' }, opts.map((x) => x.el));
+
+    const paint = () => {
+      const v = pw.value;
+      if (mode === 'pin') {
+        const n = v.length, bits = Math.round(n * Math.log2(10));
+        meter.firstChild.style.width = clamp(n / 10 * 100, 0, 100) + '%'; meter.dataset.l = n < 6 ? 1 : n < 8 ? 3 : 4;
+        info.textContent = n ? 'Length ' + n + ' · ~' + bits + ' bits · ' + (n < 8 ? 'weak — use 8+ digits or a password' : 'fair (digits only)') : '';
+        crack.textContent = n ? 'Offline brute-force at 10 billion guesses/s: ' + crackTime(bits) : '';
+        return;
+      }
+      if (!v) { meter.firstChild.style.width = '0'; info.textContent = ''; crack.textContent = ''; return; }
+      const st = generated && generated.value === v ? { bits: generated.bits, label: strength(v).level >= 4 ? 'Excellent' : strength(v).label, level: Math.max(strength(v).level, generated.bits >= 80 ? 5 : 4) } : strength(v);
+      meter.firstChild.style.width = st.level * 20 + '%'; meter.dataset.l = st.level;
+      info.textContent = (generated && generated.value === v ? 'Generated · ' : '') + 'Length ' + v.length + ' · ' + (generated && generated.value === v ? generated.pool + '-symbol alphabet · ' : '') + '~' + st.bits + ' bits of entropy · ' + st.label;
+      crack.textContent = 'Offline brute-force at 10 billion guesses/s: ' + crackTime(st.bits);
+    };
+    const genBtn = h('button', { type: 'button', class: 'btn sm', html: icon('refresh', 13) + ' Generate', onclick: () => {
+      if (mode === 'pin') { const p = generatePin(Math.min(+len.value, 12)); pw.value = p; pw2.value = p; generated = null; }
+      else {
+        const g = generatePassword(+len.value, Object.fromEntries(opts.map((x) => [x.k, x.c.checked])));
+        pw.value = g.password; pw2.value = g.password; generated = { value: g.password, pool: g.pool, bits: g.bits };
+      }
+      pw.type = 'text'; pw2.type = 'text'; eye.textContent = 'Hide'; paint(); o.onChange?.();
+    } });
+    const copyBtn = h('button', { type: 'button', class: 'btn sm', html: icon('copy', 13) + ' Copy', onclick: async () => {
+      if (!pw.value) return;
+      try { await navigator.clipboard.writeText(pw.value); ui.toast('Copied — store it in a password manager', { type: 'ok', timeout: 2200 }); } catch { pw.select(); ui.toast('Press Ctrl/Cmd+C to copy', { type: 'info' }); }
+    } });
+    const gen = h('div', { class: 'gen' },
+      h('div', { class: 'gen-row' }, h('span', { class: 'gen-lbl', text: 'Length' }), len, lenOut),
+      optsRow, h('div', { class: 'btn-row' }, genBtn, copyBtn));
+    pw.addEventListener('input', () => { if (mode === 'pin') { pw.value = pw.value.replace(/\D/g, ''); } if (generated && generated.value !== pw.value) generated = null; paint(); o.onChange?.(); });
+    pw2.addEventListener('input', () => { if (mode === 'pin') pw2.value = pw2.value.replace(/\D/g, ''); });
+    const api = {
+      el: h('div', { class: 'pwc' }, h('div', { class: 'row-between' }, h('span', { class: 'field-label', text: 'Secret' }), eye), pw, pw2, meter, info, crack, gen),
+      value: () => pw.value, confirm: () => pw2.value, focus: () => pw.focus(),
+      setMode(m) {
+        mode = m; pw.value = ''; pw2.value = ''; generated = null; pw.type = 'password'; pw2.type = 'password'; eye.textContent = 'Show';
+        pw.placeholder = m === 'pin' ? 'PIN (digits)' : 'Password'; pw.inputMode = m === 'pin' ? 'numeric' : 'text'; pw2.inputMode = pw.inputMode;
+        len.min = m === 'pin' ? 4 : 8; len.max = m === 'pin' ? 12 : 64; len.value = m === 'pin' ? 8 : 20; lenOut.textContent = len.value;
+        optsRow.hidden = m === 'pin'; genBtn.lastChild.textContent = m === 'pin' ? ' Generate PIN' : ' Generate';
+        paint();
+      },
+    };
+    api.setMode(mode);
+    return api;
+  }
+  ui.passwordInput = passwordInput;
+
   /* ==========================================================================
      Authentication UI
      ========================================================================== */
@@ -460,38 +543,19 @@
     let color = COLORS[loadProfiles().length % COLORS.length];
     let cred = 'password';
     const name = h('input', { class: 'input', placeholder: 'Profile name', maxLength: 24, autocomplete: 'off', 'aria-label': 'Profile name' });
-    const secret = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', placeholder: 'Password', 'aria-label': 'Password' });
-    const confirm = h('input', { class: 'input', type: 'password', autocomplete: 'new-password', placeholder: 'Confirm', 'aria-label': 'Confirm password' });
-    const meter = h('div', { class: 'meter' }, h('i'));
-    const meterTxt = h('div', { class: 'meter-txt mono' });
+    const pwc = passwordInput({ mode: 'password' });
     const err = h('div', { class: 'auth-err', role: 'alert' });
     const protect = h('input', { type: 'checkbox', checked: true });
     const secretBox = h('div', { class: 'secret-box' });
     const swatches = h('div', { class: 'swatches' });
     const prev = h('div', { class: 'prev' });
+    const credBox = h('div', { class: 'seg' });
 
     const paintPrev = () => prev.replaceChildren(avatar({ name: name.value || '?', color }, 72));
     const paintSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { type: 'button', class: 'swatch' + (c === color ? ' active' : ''), style: { background: c }, 'aria-label': c, onclick: () => { color = c; paintSw(); paintPrev(); } })));
-    const paintMeter = () => {
-      if (cred === 'pin') {
-        const n = secret.value.length;
-        meter.firstChild.style.width = clamp(n / 10 * 100, 0, 100) + '%'; meter.dataset.l = n < 6 ? 1 : n < 8 ? 3 : 4;
-        meterTxt.textContent = n ? n + ' digits' + (n < 8 ? ' — PINs are easy to brute-force offline; 8+ digits or a password is far safer' : '') : '';
-      } else {
-        const s = strength(secret.value);
-        meter.firstChild.style.width = s.level * 20 + '%'; meter.dataset.l = s.level;
-        meterTxt.textContent = secret.value ? s.label + ' · ~' + s.bits + ' bits' : '';
-      }
-    };
-    const setCred = (c) => { cred = c; secret.value = ''; confirm.value = ''; secret.type = 'password'; secret.placeholder = c === 'pin' ? 'PIN (digits)' : 'Password'; if (c === 'pin') secret.inputMode = 'numeric'; else secret.inputMode = 'text'; paintMeter(); credSeg(); };
-    const credSeg = () => credBox.replaceChildren(...[['password', 'Password'], ['pin', 'PIN']].map(([v, l]) => h('button', { type: 'button', class: cred === v ? 'active' : '', text: l, onclick: () => setCred(v) })));
-    const credBox = h('div', { class: 'seg' });
-    secret.addEventListener('input', () => { if (cred === 'pin') secret.value = secret.value.replace(/\D/g, ''); paintMeter(); });
-    confirm.addEventListener('input', () => { if (cred === 'pin') confirm.value = confirm.value.replace(/\D/g, ''); });
+    const credSeg = () => credBox.replaceChildren(...[['password', 'Password'], ['pin', 'PIN']].map(([v, l]) => h('button', { type: 'button', class: cred === v ? 'active' : '', text: l, onclick: () => { cred = v; pwc.setMode(v); credSeg(); } })));
     name.addEventListener('input', paintPrev);
-    const gen = h('button', { type: 'button', class: 'btn sm', html: icon('refresh', 13) + ' Generate strong password', onclick: () => { setCred('password'); const pw = generatePassword(20); secret.value = pw; confirm.value = pw; secret.type = 'text'; paintMeter(); } });
-    const eye = h('button', { type: 'button', class: 'btn sm', text: 'Show', onclick: (e) => { secret.type = secret.type === 'password' ? 'text' : 'password'; e.target.textContent = secret.type === 'password' ? 'Show' : 'Hide'; } });
-    secretBox.append(h('div', { class: 'row-between' }, credBox, h('div', { class: 'btn-row' }, eye)), secret, confirm, meter, meterTxt, h('div', { class: 'row-left' }, gen),
+    secretBox.append(credBox, pwc.el,
       h('p', { class: 'auth-note', text: 'There is no recovery. If you forget this password the profile’s encrypted data cannot be restored — keep an encrypted backup (Settings → Security).' }));
     protect.addEventListener('change', () => { secretBox.hidden = !protect.checked; });
 
@@ -503,9 +567,9 @@
       let sec = null;
       if (protect.checked) {
         if (!hasCrypto) { err.textContent = 'Encryption needs HTTPS or localhost'; return; }
-        sec = secret.value;
+        sec = pwc.value();
         if (cred === 'pin' ? sec.length < 4 : sec.length < 8) { err.textContent = cred === 'pin' ? 'PIN must be at least 4 digits' : 'Password must be at least 8 characters'; return; }
-        if (sec !== confirm.value) { err.textContent = 'Entries do not match'; return; }
+        if (sec !== pwc.confirm()) { err.textContent = 'Entries do not match'; return; }
         if (cred === 'password' && strength(sec).level < 2) { err.textContent = 'That password is too weak'; return; }
       }
       busy = true; btn.disabled = true; btn.textContent = sec ? 'Encrypting…' : 'Creating…';
@@ -526,7 +590,7 @@
       h('div', { class: 'auth-links' },
         first ? null : h('button', { type: 'button', class: 'link', onclick: () => showAuth(pickView()), text: '← All profiles' }),
         h('button', { type: 'button', class: 'link', onclick: () => showAuth(importView(first)), text: 'Import encrypted backup…' })));
-    credSeg(); paintSw(); paintPrev(); paintMeter();
+    credSeg(); paintSw(); paintPrev();
     return form;
   }
 

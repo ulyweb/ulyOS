@@ -725,10 +725,11 @@
     async encryptSel() {
       const picks = this.entries.filter((e) => this.sel.has(e.name) && !e.isDir && e.kind !== 'locked');
       if (!picks.length) { ui.toast('Select one or more files to encrypt', { type: 'info' }); return; }
+      const pwc = ulyOS.ui.passwordInput();
       const v = await ui.form({
         title: 'Encrypt ' + (picks.length === 1 ? "'" + picks[0].name + "'" : picks.length + ' files'),
         message: 'Creates a .uly file protected with AES-256-GCM (PBKDF2-SHA256, 600,000 iterations). The original is kept. There is no recovery if you forget the password.',
-        fields: [{ name: 'pw', label: 'Password', type: 'password' }, { name: 'pw2', label: 'Confirm password', type: 'password' }], okText: 'Encrypt',
+        fields: [{ name: 'pw', type: 'custom', node: pwc.el, get: pwc.value, focus: pwc.focus }, { name: 'pw2', type: 'custom', get: pwc.confirm }], okText: 'Encrypt',
         validate: (x) => (x.pw.length < 8 ? 'Use at least 8 characters' : x.pw !== x.pw2 ? 'Passwords do not match' : null),
       });
       if (!v) return;

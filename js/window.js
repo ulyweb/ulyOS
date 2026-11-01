@@ -845,8 +845,12 @@
     const inputs = {};
     const rows = fields.map((f) => {
       let input;
+      if (f.type === 'custom') {   // caller supplies its own node + value getter (e.g. the password widget)
+        inputs[f.name] = { get value() { return f.get(); }, focus: f.focus };
+        return f.node || null;
+      }
       if (f.type === 'select') {
-        input = h('select', { class: 'input' }, f.options.map((o) => {
+        input = h('select', { class: 'input', onchange: f.onchange ? (e) => f.onchange(e.target.value) : null }, f.options.map((o) => {
           const v = typeof o === 'object' ? o.value : o;
           return h('option', { value: v, text: typeof o === 'object' ? o.label : o, selected: v === f.value });
         }));
@@ -873,7 +877,7 @@
         okBtn));
     setTimeout(() => {
       const first = inputs[fields[0]?.name];
-      if (first) { first.focus(); first.select?.(); } else okBtn.focus();
+      if (first) { first.focus?.(); first.select?.(); } else okBtn.focus();
     }, 30);
     return form;
   });

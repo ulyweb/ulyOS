@@ -43,3 +43,6 @@ Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
 ## Personalize
 - Settings → Appearance / Effects / Desktop: 14 wallpapers, cursor styles, icon styles and window animation styles, each with a **Random** option, plus **Surprise me** (and an optional "surprise me on every sign-in").
 - Settings → Dock & Menu bar: taskbar or floating dock at any screen edge, auto-hide, icon magnification, pinned apps, and an optional macOS-style menu bar.
+- Settings footer: autosave status, **Save now**, **Export settings** and **Import settings** (appearance, dock / menu bar and desktop icon layout as a JSON file, to copy a setup to another device or profile; imports are validated).
+- Password generator everywhere a secret is chosen (new profile, change password, file encryption, backup export): length, character sets, live entropy and estimated brute-force time.
+- Defaults: floating dock, clock with seconds, colorful animated icons.

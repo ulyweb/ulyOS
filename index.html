@@ -3,6 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ulyOS">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#000000">
   <title>ulyOS</title>
@@ -47,6 +54,7 @@
     <button id="tb-start" class="tb-start" aria-label="Start menu" aria-haspopup="true">
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>
     </button>
+    <button id="tb-widgets" class="tb-start tb-widgets" aria-label="Widgets" title="Widgets"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></button>
     <div id="tb-tasks" class="tb-tasks"></div>
     <div id="tb-tray" class="tb-tray">
       <button id="tray-ram" class="tray-ram" title="Open Task Manager">
@@ -86,5 +94,6 @@
   <script src="js/desktop.js"></script>
   <script src="js/shell.js"></script>
   <script src="js/widgets.js"></script>
+  <script>if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol) && !(window.ulyOS && ulyOS.config && ulyOS.config.OFFLINE)) navigator.serviceWorker.register("sw.js").catch(function () {});</script>
 </body>
 </html>

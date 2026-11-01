@@ -20,13 +20,24 @@
   const Shell = (ulyOS.Shell = {});
 
   const LAYOUT_DEFAULTS = {
-    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
-    showRam: true, showClock: true, menubar: false, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
+    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 60, taskbarAutoHide: true, taskbarMagnify: true, taskbarLabels: true,
+    showRam: true, showClock: true, menubar: true, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
   };
 
   /* ------------------------------------------------------------------------
      Layout: insets, positions, auto-hide, tray placement
      ------------------------------------------------------------------------ */
+  /* Safe-area insets (iPhone notch / home indicator, rounded iPad corners) measured through a hidden probe. */
+  let probe = null;
+  function safeArea() {
+    if (!probe) {
+      probe = h('div', { 'aria-hidden': 'true', style: { position: 'fixed', left: '0', top: '0', width: '0', height: '0', visibility: 'hidden', pointerEvents: 'none', paddingTop: 'env(safe-area-inset-top)', paddingRight: 'env(safe-area-inset-right)', paddingBottom: 'env(safe-area-inset-bottom)', paddingLeft: 'env(safe-area-inset-left)' } });
+      document.body.append(probe);
+    }
+    const cs = getComputedStyle(probe);
+    return { t: parseFloat(cs.paddingTop) || 0, r: parseFloat(cs.paddingRight) || 0, b: parseFloat(cs.paddingBottom) || 0, l: parseFloat(cs.paddingLeft) || 0 };
+  }
+
   Shell.layout = function () {
     const tb = $('#taskbar');
     if (!tb || !API()) return;
@@ -34,7 +45,8 @@
     const pos = ['bottom', 'top', 'left', 'right'].includes(get('taskbarPos')) ? get('taskbarPos') : 'bottom';
     const size = clamp(+get('taskbarSize') || 52, 36, 84);
     const mb = !!get('menubar');
-    const mbH = mb ? 28 : 0;
+    const sa = safeArea();
+    const mbH = (mb ? 28 : 0) + sa.t;   // menu bar (+ notch area) height
     const auto = !!get('taskbarAutoHide');
     const horizontal = pos === 'top' || pos === 'bottom';
     const thick = mode === 'dock' ? size + 12 : size;
@@ -45,10 +57,11 @@
     root.style.setProperty('--taskbar-h', thick + 'px');
     root.style.setProperty('--tb-item', item + 'px');
     root.style.setProperty('--mb-h', mbH + 'px');
+    root.style.setProperty('--sat', sa.t + 'px'); root.style.setProperty('--sab', sa.b + 'px'); root.style.setProperty('--sal', sa.l + 'px'); root.style.setProperty('--sar', sa.r + 'px');
     root.style.setProperty('--inset-top', mbH + (pos === 'top' ? reserve : 0) + 'px');
-    root.style.setProperty('--inset-bottom', (pos === 'bottom' ? reserve : 0) + 'px');
-    root.style.setProperty('--inset-left', (pos === 'left' ? reserve : 0) + 'px');
-    root.style.setProperty('--inset-right', (pos === 'right' ? reserve : 0) + 'px');
+    root.style.setProperty('--inset-bottom', sa.b + (pos === 'bottom' ? reserve : 0) + 'px');
+    root.style.setProperty('--inset-left', sa.l + (pos === 'left' ? reserve : 0) + 'px');
+    root.style.setProperty('--inset-right', sa.r + (pos === 'right' ? reserve : 0) + 'px');
 
     tb.dataset.mode = mode; tb.dataset.pos = pos;
     tb.classList.toggle('autohide', auto);
@@ -62,7 +75,8 @@
 
     // hot zone that reveals an auto-hidden taskbar (works over iframes too)
     const hot = $('#tb-hot');
-    const t = 6;
+    const t = ulyOS.util.isTouch() ? 30 : 6;   // bigger target on touch screens (it shows a grab pill there)
+    hot.dataset.pos = pos;
     hot.style.cssText = pos === 'bottom' ? 'left:0;right:0;bottom:0;height:' + t + 'px'
       : pos === 'top' ? 'left:0;right:0;top:' + mbH + 'px;height:' + t + 'px'
         : pos === 'left' ? 'left:0;top:' + mbH + 'px;bottom:0;width:' + t + 'px' : 'right:0;top:' + mbH + 'px;bottom:0;width:' + t + 'px';
@@ -250,7 +264,7 @@
        to the pointer, then re-centred along the dock axis so scaled icons never overlap. */
     const MAXS = 1.5, SIGMA = 62, GAP = 6;
     tb.addEventListener('pointermove', (e) => {
-      if (!tb.classList.contains('mag')) return;
+      if (!tb.classList.contains('mag') || e.pointerType === 'touch') return;
       const horiz = tb.dataset.pos === 'top' || tb.dataset.pos === 'bottom';
       const els = [$('#tb-start'), ...$$('.tb-item', tb)];
       const box = tb.getBoundingClientRect();
@@ -277,7 +291,11 @@
     const busy = () => !!($('#start-menu.open') || $('.ctx-menu'));
     const reveal = (on) => { clearTimeout(hideT); tb.classList.toggle('reveal', on); };
     const later = () => { clearTimeout(hideT); hideT = setTimeout(() => { if (busy()) later(); else reveal(false); }, 550); };
-    $('#tb-hot').addEventListener('pointerenter', () => reveal(true));
+    $('#tb-hot').addEventListener('pointerenter', (e) => { if (e.pointerType !== 'touch') reveal(true); });
+    $('#tb-hot').addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') { e.preventDefault(); reveal(!tb.classList.contains('reveal')); } });
+    document.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' && tb.classList.contains('reveal') && !e.target.closest('#taskbar, #tb-hot, #start-menu, .ctx-menu')) reveal(false); }, true);
+    tb.addEventListener('click', () => { if (ulyOS.util.isTouch()) later(); });
+    $('#tb-widgets').addEventListener('click', () => ulyOS.Widgets.togglePanel());
     tb.addEventListener('pointerenter', () => reveal(true));
     tb.addEventListener('pointerleave', later);
     $('#tb-desk').addEventListener('click', () => (WM.all().some((w) => !w.minimized) ? WM.minimizeAll() : WM.restoreAll()));
@@ -326,6 +344,7 @@
     document.addEventListener('pointerdown', (e) => { if (menu.classList.contains('open') && !e.target.closest('#start-menu, #tb-start, .ctx-menu')) closeMenu(); }, true);
     window.addEventListener('blur', () => { if (menu.classList.contains('open')) closeMenu(); });
     window.addEventListener('resize', placeStart);
+    if (!document.documentElement.requestFullscreen) $('#sm-fullscreen').hidden = true;   // iPhone Safari has no Fullscreen API
     $('#sm-fullscreen').addEventListener('click', () => { closeMenu(); document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.(); });
     $('#sm-restart').addEventListener('click', () => { closeMenu(); API().restart(); });
     $('#sm-lock').addEventListener('click', () => { closeMenu(); API().lockNow(); });
@@ -388,7 +407,7 @@
       { label: (get('taskbarAutoHide') ? '✓ ' : '    ') + 'Auto-hide taskbar / dock', icon: 'arrowUp', action: () => API().Settings.set('taskbarAutoHide', !get('taskbarAutoHide')) },
       { label: 'Dock position', icon: 'desktop', submenu: ['bottom', 'top', 'left', 'right'].map((p) => ({ label: (get('taskbarPos') === p ? '✓ ' : '    ') + p[0].toUpperCase() + p.slice(1), action: () => API().Settings.set('taskbarPos', p) })) },
       { label: 'Customize dock & menu bar…', icon: 'sliders', action: () => API().openSettings('shell') }, { separator: true },
-      { label: document.fullscreenElement ? 'Exit full screen' : 'Enter full screen', icon: 'fullscreen', action: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) },
+      ...(!document.documentElement.requestFullscreen ? [] : [{ label: document.fullscreenElement ? 'Exit full screen' : 'Enter full screen', icon: 'fullscreen', action: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }]),
     ]);
     add(h('button', { class: 'mb-btn', text: 'Window' }), () => {
       const f = WM.focused(), all = WM.all().filter((w) => !w.closing);

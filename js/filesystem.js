@@ -59,10 +59,30 @@
     }
     return base + '-' + Date.now() + ext;
   }
+  /* Safari / iOS have no FileSystemFileHandle.createWritable() — write through a worker that uses
+     OPFS createSyncAccessHandle() instead. */
+  const canWritable = typeof FileSystemFileHandle !== 'undefined' && 'createWritable' in FileSystemFileHandle.prototype;
+  let opfsWorker = null, wSeq = 0;
+  const wPending = new Map();
+  function worker() {
+    if (opfsWorker) return opfsWorker;
+    const src = 'onmessage=async(e)=>{const{id,path,buf}=e.data;try{let d=await navigator.storage.getDirectory();for(const p of path.slice(0,-1))d=await d.getDirectoryHandle(p);' +
+      'const fh=await d.getFileHandle(path[path.length-1],{create:true});const ah=await fh.createSyncAccessHandle();ah.truncate(0);ah.write(new Uint8Array(buf),{at:0});ah.flush();ah.close();postMessage({id,ok:true})}catch(err){postMessage({id,ok:false,err:String(err&&err.message||err)})}};';
+    opfsWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+    opfsWorker.onmessage = (e) => { const p = wPending.get(e.data.id); if (!p) return; wPending.delete(e.data.id); e.data.ok ? p.res() : p.rej(new Error(e.data.err)); };
+    return opfsWorker;
+  }
+  async function writeHandle(fh, data) {
+    if (canWritable) { const w = await fh.createWritable(); try { await w.write(data); } finally { await w.close(); } return; }
+    const root = await navigator.storage.getDirectory();
+    const path = await root.resolve(fh);
+    if (!path) throw new Error('This location cannot be written to in this browser');
+    const buf = await new Response(data).arrayBuffer();
+    await new Promise((res, rej) => { const id = ++wSeq; wPending.set(id, { res, rej }); worker().postMessage({ id, path, buf }, [buf]); });
+  }
   async function writeFile(dir, name, data) {
     const fh = await dir.getFileHandle(name, { create: true });
-    const w = await fh.createWritable();
-    try { await w.write(data); } finally { await w.close(); }
+    await writeHandle(fh, data);
     return fh;
   }
   async function copyEntry(src, dstDir, newName) {
@@ -250,8 +270,7 @@
           name = clean;
           pathEl.textContent = (st.pathLabel ? st.pathLabel + '/' : '') + name;
         } else {
-          const w = await handle.createWritable();
-          try { await w.write(ta.value); } finally { await w.close(); }
+          await writeHandle(handle, ta.value);
         }
         setDirty(false);
         ulyOS.audit("File '" + name + "' saved (" + fmtBytes(new Blob([ta.value]).size) + ')', 'ok');
@@ -587,9 +606,11 @@
       const loc = roots.local;
       const name = (loc.handle || loc.stored)?.name;
       if (name) items.push(mk('hdd', name, () => this.goRoot('local', []), this.rootId === 'local'));
-      items.push(mk('plus', name ? 'Change folder…' : 'Open folder…', async () => {
-        try { await mountLocal(true); await this.goRoot('local', []); } catch (err) { if (err.name !== 'AbortError') ui.toast(err.message, { type: 'err' }); }
-      }));
+      if (window.showDirectoryPicker) {
+        items.push(mk('plus', name ? 'Change folder…' : 'Open folder…', async () => {
+          try { await mountLocal(true); await this.goRoot('local', []); } catch (err) { if (err.name !== 'AbortError') ui.toast(err.message, { type: 'err' }); }
+        }));
+      } else items.push(h('div', { class: 'side-note', text: 'Mounting real folders needs Chrome or Edge on a computer. Use Upload / Download here.' }));
       this.side.replaceChildren(...items);
     }
 

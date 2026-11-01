@@ -53,3 +53,12 @@ Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
 - **Contact Admin** (online build): in the profile screen footer, start menu, Help menu and Settings → System. Uses the same Google Apps Script relay as ulyweb/key. Only what you type is sent, and only after you press Send.
 - **Admin notification** (online build): the site admin is emailed when a profile is created — profile name, protected yes/no, the optional email you typed, time, site, language and time zone. Never passwords, PINs, keys, files or app data. This is disclosed on the profile screen and is disabled on localhost, file:// and in the offline build.
 - **Offline version**: Settings → System, the Help menu, the start menu or the desktop right-click menu builds `ulyOS-offline-YYYYMMDD.zip` in the browser: the whole OS, start scripts for macOS/Linux/Windows, and a config with `OFFLINE: true` (no Contact Admin, no notification, nothing sent anywhere).
+
+## Data widgets, defaults and mobile
+- **Crypto**: Watchlist and Trending tabs; ⚙ opens a search over every CoinGecko coin so you can follow your own tokens (★ in Trending adds one).
+- **Scoreboard**: live scores from ESPN for NBA, WNBA, NCAA, NFL, MLB, NHL, MLS, Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Champions League, UFC, F1, NASCAR, tennis and golf — pick leagues, add any ESPN `sport/league` path, or filter to your team.
+- **Headlines**: tabs for World (Wikipedia In the news), Trending on Wikipedia, Tech (Hacker News) and ESPN news per league.
+- **Prediction markets**: Polymarket Trending and a Watchlist you build by starring or searching. Odds are market-implied probabilities — informational only, nothing is traded.
+- These widgets call public APIs (CoinGecko, ESPN, Polymarket, Wikipedia, Hacker News) only while the widget exists.
+- Defaults: menu bar on, dock size 60, auto-hide on, floating dock, colorful icons.
+- **Phones & tablets** (iPhone, Android, iPadOS): one-tap to open icons, long-press for context menus, full-screen windows on phones, a tap-to-reveal dock handle, a widgets panel on the dock, safe-area support for notches, and installable as a home-screen app (web app manifest + icons + service worker). iOS Safari file saving uses an OPFS worker fallback because it lacks `createWritable()`.

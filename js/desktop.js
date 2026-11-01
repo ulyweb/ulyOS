@@ -20,8 +20,8 @@
     cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '24', widgetsVisible: true,
     cursorStyle: 'classic', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // taskbar / dock / menu bar (see js/shell.js)
-    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
-    showRam: true, showClock: true, menubar: false, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
+    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 60, taskbarAutoHide: true, taskbarMagnify: true, taskbarLabels: true,
+    showRam: true, showClock: true, menubar: true, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
   };
   let settings = { ...DEFAULT_SETTINGS };   // replaced with the profile's saved settings on sign-in
   const Settings = (ulyOS.settings = {
@@ -85,7 +85,7 @@
     Cursor.apply();
     document.body.dataset.icons = val('iconStyle') || 'glass';
     ulyOS.anim.mode = s.animStyle || 'scale';
-    const sz = ICON_SIZES[s.iconSize] || ICON_SIZES.medium;
+    const sz = ICON_SIZES[window.innerWidth < 520 ? 'small' : s.iconSize] || ICON_SIZES.medium;   // phones always use the compact grid
     root.style.setProperty('--cell-w', sz.cw + 'px');
     root.style.setProperty('--cell-h', sz.ch + 'px');
     root.style.setProperty('--tile', sz.tile + 'px');
@@ -330,6 +330,10 @@
     return best || [col, row];
   }
   function nextFree() {
+    if (WM.compact()) {   // phones fill row by row like a home screen
+      for (let r = 0; r < Desktop.rows; r++) for (let c = 0; c < Math.max(Desktop.cols, 1); c++) if (!occupied(c, r)) return [c, r];
+      return [0, 0];
+    }
     for (let c = 0; c < Math.max(Desktop.cols, 1); c++) for (let r = 0; r < Desktop.rows; r++) if (!occupied(c, r)) return [c, r];
     return [0, 0];
   }
@@ -381,6 +385,12 @@
       tile, h('div', { class: 'di-label', text: ic.name }));
     el.addEventListener('dblclick', () => { el.classList.add('launching'); setTimeout(() => el.classList.remove('launching'), 1300); launch(ic); ulyOS.audit("Launching '" + ic.name + "' from desktop", 'info'); });
     el.addEventListener('keydown', (e) => { if (e.key === 'Enter') launch(ic); });
+    el.addEventListener('click', (e) => {   // touch / pen: one tap opens (double-tap is unreliable on phones)
+      if (el._drag || !(e.pointerType === 'touch' || e.pointerType === 'pen')) return;
+      Desktop.selected = new Set([ic.id]); paintSelection();
+      el.classList.add('launching'); setTimeout(() => el.classList.remove('launching'), 1300);
+      launch(ic); ulyOS.audit("Launching '" + ic.name + "' from desktop (tap)", 'info');
+    });
     el.addEventListener('pointerdown', (e) => beginIconDrag(ic, el, e));
     el.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
@@ -422,6 +432,7 @@
       document.removeEventListener('pointerup', end);
       document.removeEventListener('pointercancel', end);
       if (!moved) return;
+      el._drag = true; setTimeout(() => { el._drag = false; }, 350);
       WM.setIframesInert(false);
       el.classList.remove('dragging');
       hint.style.display = 'none';
@@ -993,6 +1004,10 @@
       Object.assign(settings, { clockSeconds: true, taskbarMode: 'dock', iconStyle: 'vivid' });
       store.set('ulyos.settings', settings); store.set('ulyos.migr.defaults2', true);
     }
+    if (!store.get('ulyos.migr.defaults3', false)) {   // one-time: menu bar on, dock size 60, auto-hide on
+      Object.assign(settings, { menubar: true, taskbarSize: 60, taskbarAutoHide: true });
+      store.set('ulyos.settings', settings); store.set('ulyos.migr.defaults3', true);
+    }
     if (settings.shuffleOnLogin) surprise(false);
     applySettings();
     Desktop.init();
@@ -1001,6 +1016,8 @@
     boot(true);
   }
   function init() {
+    let wasCompact = ulyOS.WM.compact();
+    window.addEventListener('resize', () => { const c = ulyOS.WM.compact(); if (c !== wasCompact) { wasCompact = c; applySettings(); } });
     applySettings();   // defaults — gives the profile screen the custom cursor + glass look
     Cursor.init();
     bus.on('session:start', startSession);

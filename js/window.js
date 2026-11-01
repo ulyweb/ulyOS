@@ -185,6 +185,13 @@
   /** Usable window area (excludes menu bar / taskbar). Coordinates are relative to #windows. */
   WM.area = () => ({ w: window.innerWidth - inset('left') - inset('right'), h: window.innerHeight - inset('top') - inset('bottom') });
   WM.origin = () => ({ x: inset('left'), y: inset('top') });
+  /** Phone-sized viewport (portrait phone, or short landscape phone): windows open full-screen. */
+  WM.compact = () => window.innerWidth < 700 || (window.innerWidth < 940 && window.innerHeight < 500);
+  ulyOS.util.isTouch = () => window.matchMedia('(pointer: coarse)').matches;
+  const syncCompact = () => { document.body.classList.toggle('compact', WM.compact()); document.body.classList.toggle('touch', ulyOS.util.isTouch()); };
+  syncCompact();
+  window.addEventListener('resize', syncCompact);
+  window.addEventListener('orientationchange', () => setTimeout(syncCompact, 120));
   WM.all = () => [...registry.values()];
   WM.get = (id) => registry.get(id);
   WM.byApp = (appId) => WM.all().filter((w) => w.appId === appId);
@@ -283,6 +290,7 @@
   function beginDrag(win, e) {
     if (e.button !== 0 || e.target.closest('.win-controls') || win.minimized) return;
     WM.focus(win);
+    if (WM.compact()) return;   // phone layout: windows are full-screen, not draggable
     const bar = e.currentTarget;
     const start = { x: e.clientX, y: e.clientY };
     let moved = false, ended = false, origin = null, snapKind = null;
@@ -668,13 +676,16 @@
     // interactions
     el.addEventListener('pointerdown', () => WM.focus(win), true);
     titlebar.addEventListener('pointerdown', (e) => beginDrag(win, e));
-    titlebar.addEventListener('dblclick', (e) => { if (!e.target.closest('.win-controls')) WM.maximize(win); });
+    titlebar.addEventListener('dblclick', (e) => { if (!e.target.closest('.win-controls') && !WM.compact()) WM.maximize(win); });
     titlebar.addEventListener('auxclick', (e) => { if (e.button === 1) WM.close(win); });
     titlebar.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       ulyOS.ui.contextMenu(e.clientX, e.clientY, windowMenu(win));
     });
 
+    if (WM.compact() && win.resizable) {   // phone: every window opens full-screen
+      win.restoreRect = { ...win.rect }; el.classList.add('maximized'); win.maximized = true; syncMaxButton(win);
+    }
     const d = dur(260);
     setTimeout(() => el.classList.remove('opening'), d);
     if (!d) el.classList.remove('opening');
@@ -741,10 +752,11 @@
   };
 
   function place(menu, x, y, anchorLeft) {
-    const r = menu.getBoundingClientRect();
+    const mw = menu.offsetWidth, mh = menu.offsetHeight;   // layout size — getBoundingClientRect() is skewed by the pop-in scale animation
+    const vw = window.innerWidth, vh = window.innerHeight;
     let left = x, top = y;
-    if (left + r.width > window.innerWidth - 8) left = anchorLeft != null ? anchorLeft - r.width + 4 : window.innerWidth - r.width - 8;
-    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - r.height - 8);
+    if (left + mw > vw - 8) left = anchorLeft != null ? anchorLeft - mw + 4 : vw - mw - 8;
+    if (top + mh > vh - 8) top = vh - mh - 8;
     menu.style.left = Math.max(8, left) + 'px';
     menu.style.top = Math.max(8, top) + 'px';
     menu.style.visibility = '';
@@ -940,4 +952,24 @@
     if (e.target.closest('input, textarea, [contenteditable="true"]')) return;
     e.preventDefault();
   });
+
+  /* ---- Touch: long-press opens the context menu (iOS never fires `contextmenu` itself) ---- */
+  (function () {
+    let timer = 0, sx = 0, sy = 0, target = null, fired = 0;
+    const clear = () => { clearTimeout(timer); timer = 0; };
+    document.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch' || !e.isPrimary) return;
+      clear(); sx = e.clientX; sy = e.clientY; target = e.target;
+      if (target.closest && target.closest('input, textarea, select, .ctx-menu, .win-titlebar, .rz')) return;
+      timer = setTimeout(() => {
+        timer = 0; fired = Date.now();
+        if (navigator.vibrate) navigator.vibrate(10);
+        target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: sx, clientY: sy, button: 2 }));
+      }, 480);
+    }, { capture: true, passive: true });
+    document.addEventListener('pointermove', (e) => { if (timer && Math.hypot(e.clientX - sx, e.clientY - sy) > 10) clear(); }, { capture: true, passive: true });
+    ['pointerup', 'pointercancel'].forEach((ev) => document.addEventListener(ev, clear, { capture: true, passive: true }));
+    // the finger-lift after a long-press must not "click" whatever appeared under it
+    document.addEventListener('click', (e) => { if (Date.now() - fired < 700) { e.stopPropagation(); e.preventDefault(); fired = 0; } }, true);
+  })();
 })();

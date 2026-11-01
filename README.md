@@ -28,6 +28,7 @@ Open http://localhost:8080 in Chrome or Edge (use `localhost` or HTTPS, not `fil
 | System Vault | key and passphrase generator with entropy scoring (from ulyweb/key) |
 | Crypto Compass | beginner crypto guide and prices (from ulyweb/crypto) |
 | Polotno, GetArtCraft | embedded web apps |
+| YouTube, XRP Price (CoinMarketCap), Outlook | shortcuts that open in a browser tab, because those sites forbid embedding |
 | Your own URL shortcuts | right-click the desktop → New URL shortcut (sites that forbid embedding open in a browser tab) |
 | Files, Task Manager, Settings | built in |
 

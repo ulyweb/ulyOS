@@ -178,6 +178,9 @@
     { id: 'files', kind: 'sys', sys: 'files', name: 'Files' },
     { id: 'polotno', kind: 'url', name: 'Polotno', url: 'https://studio.polotno.com/', glyph: 'shapes', mem: 95, w: 1100, h: 720, tint: '#c4b5fd' },
     { id: 'getartcraft', kind: 'url', name: 'GetArtCraft', url: 'https://app.getartcraft.com/create-image', glyph: 'sparkles', mem: 140, w: 1100, h: 720, tint: '#fbbf24' },
+    { id: 'youtube', kind: 'url', name: 'YouTube', url: 'https://www.youtube.com/', glyph: 'video', mode: 'tab', tint: '#ff5c5c' },
+    { id: 'xrp', kind: 'url', name: 'XRP Price', url: 'https://coinmarketcap.com/currencies/xrp/', glyph: 'trending', mode: 'tab', tint: '#38bdf8' },
+    { id: 'outlook', kind: 'url', name: 'Outlook', url: 'https://outlook.office.com/mail', glyph: 'mail', mode: 'tab', tint: '#4fa3ff' },
     { id: 'trustvault', kind: 'local', name: 'TrustVault', file: 'apps/trustvault.html', glyph: 'shield', mem: 48, w: 1180, h: 760, tint: '#5eead4' },
     { id: 'qrseal', kind: 'local', name: 'QR Seal', file: 'apps/qrseal.html', glyph: 'qr', mem: 60, w: 980, h: 760, tint: '#c4b5fd' },
     { id: 'systemvault', kind: 'local', name: 'System Vault', file: 'apps/systemvault.html', glyph: 'key', mem: 62, w: 1100, h: 760, tint: '#fb7185' },
@@ -464,6 +467,11 @@
   Desktop.init = function () {
     const saved = store.get('ulyos.icons', null);
     Desktop.icons = saved && Array.isArray(saved.list) ? saved.list : DEFAULT_ICONS.map((d) => ({ ...d }));
+    if (!store.get('ulyos.migr.addYtXrpOutlook', false)) {   // one-time: new stock icons for existing profiles
+      ['youtube', 'xrp', 'outlook'].forEach((id) => { if (!Desktop.icons.some((i) => i.id === id)) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === id) }); });
+      store.set('ulyos.migr.addYtXrpOutlook', true);
+      if (saved) saveIcons();
+    }
     if (!store.get('ulyos.migr.dropPhotopeaSpotify', false)) {   // one-time: these are no longer stock icons
       Desktop.icons = Desktop.icons.filter((i) => !['photopea', 'spotify'].includes(i.id));
       store.set('ulyos.migr.dropPhotopeaSpotify', true);

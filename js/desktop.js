@@ -132,16 +132,39 @@
       return u.href;
     } catch { return null; }
   }
-  /** open.spotify.com/playlist/ID → embeddable /embed/playlist/ID */
+  /** Convert share links to embeddable players (Spotify, YouTube, Vimeo). */
   function embedUrl(url) {
     try {
       const u = new URL(url);
+      const host = u.hostname.replace(/^www\./, '').replace(/^m\./, '');
+      if (host === 'youtube.com' || host === 'youtu.be' || host === 'youtube-nocookie.com') {
+        let id = null;
+        if (host === 'youtu.be') id = u.pathname.slice(1).split('/')[0];
+        else if (u.pathname === '/watch') id = u.searchParams.get('v');
+        else if (/^\/(shorts|live)\//.test(u.pathname)) id = u.pathname.split('/')[2];
+        if (id && /^[\w-]{6,}$/.test(id)) return 'https://www.youtube.com/embed/' + id + '?rel=0';
+        if (u.pathname === '/playlist' && u.searchParams.get('list')) return 'https://www.youtube.com/embed/videoseries?list=' + encodeURIComponent(u.searchParams.get('list'));
+      }
+      if (host === 'vimeo.com' && /^\/\d+/.test(u.pathname)) return 'https://player.vimeo.com/video/' + u.pathname.split('/')[1];
       if (u.hostname === 'open.spotify.com' && !u.pathname.startsWith('/embed')) {
         const m = u.pathname.match(/^\/(?:intl-[a-z]+\/)?(track|album|playlist|artist|show|episode)\/([A-Za-z0-9]+)/);
         if (m) return 'https://open.spotify.com/embed/' + m[1] + '/' + m[2] + '?utm_source=generator&theme=0';
       }
     } catch { /* ignore */ }
     return url;
+  }
+  /** Well-known sites that send X-Frame-Options / CSP frame-ancestors and cannot be shown in a window. */
+  const NO_EMBED = ['youtube.com', 'google.com', 'facebook.com', 'instagram.com', 'x.com', 'twitter.com', 'linkedin.com', 'github.com', 'netflix.com', 'amazon.com',
+    'reddit.com', 'whatsapp.com', 'tiktok.com', 'discord.com', 'chatgpt.com', 'openai.com', 'claude.ai', 'anthropic.com', 'paypal.com', 'apple.com', 'microsoft.com',
+    'live.com', 'outlook.com', 'office.com', 'bing.com', 'duckduckgo.com', 'twitch.tv', 'pinterest.com', 'dropbox.com', 'zoom.us', 'slack.com', 'notion.so',
+    'coinbase.com', 'robinhood.com', 'uphold.com', 'binance.com', 'kraken.com', 'ebay.com', 'yahoo.com', 'cnn.com', 'nytimes.com'];
+  function blocksEmbedding(url) {
+    try {
+      const u = new URL(url);
+      const host = u.hostname.replace(/^www\./, '');
+      if ((host === 'youtube.com' || host === 'youtube-nocookie.com') && u.pathname.startsWith('/embed')) return false;
+      return NO_EMBED.some((d) => host === d || host.endsWith('.' + d));
+    } catch { return false; }
   }
   const hostName = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
   const hueOf = (s) => { let n = 0; for (const c of s) n = (n * 31 + c.charCodeAt(0)) % 360; return n; };
@@ -153,10 +176,8 @@
   };
   const DEFAULT_ICONS = [
     { id: 'files', kind: 'sys', sys: 'files', name: 'Files' },
-    { id: 'photopea', kind: 'url', name: 'Photopea', url: 'https://www.photopea.com/', glyph: 'layers', mem: 120, w: 1200, h: 760, tint: '#7dd3fc' },
     { id: 'polotno', kind: 'url', name: 'Polotno', url: 'https://studio.polotno.com/', glyph: 'shapes', mem: 95, w: 1100, h: 720, tint: '#c4b5fd' },
     { id: 'getartcraft', kind: 'url', name: 'GetArtCraft', url: 'https://app.getartcraft.com/create-image', glyph: 'sparkles', mem: 140, w: 1100, h: 720, tint: '#fbbf24' },
-    { id: 'spotify', kind: 'url', name: 'Spotify', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M?utm_source=generator&theme=0', glyph: 'headphones', mem: 70, w: 560, h: 700, tint: '#4ade80' },
     { id: 'trustvault', kind: 'local', name: 'TrustVault', file: 'apps/trustvault.html', glyph: 'shield', mem: 48, w: 1180, h: 760, tint: '#5eead4' },
     { id: 'qrseal', kind: 'local', name: 'QR Seal', file: 'apps/qrseal.html', glyph: 'qr', mem: 60, w: 980, h: 760, tint: '#c4b5fd' },
     { id: 'systemvault', kind: 'local', name: 'System Vault', file: 'apps/systemvault.html', glyph: 'key', mem: 62, w: 1100, h: 760, tint: '#fb7185' },
@@ -188,8 +209,16 @@
       } catch (err) { ui.toast("Could not load '" + ic.name + "': " + err.message + ' (serve ulyOS over http://, not file://)', { type: 'err' }); }
       return;
     }
+    const target = embedUrl(ic.url);
+    const mode = ic.mode || 'auto';
+    if (mode === 'tab' || (mode === 'auto' && blocksEmbedding(target))) {
+      window.open(target, '_blank', 'noopener,noreferrer');
+      if (mode === 'auto') ui.toast(hostName(target) + ' doesn’t allow embedding, so it opened in a browser tab. Paste a direct video/playlist link to play YouTube in a window.', { timeout: 6500 });
+      ulyOS.audit("'" + ic.name + "' opened in a browser tab (" + hostName(target) + ')', 'info');
+      return;
+    }
     WM.open({
-      appId: 'web:' + ic.id, title: ic.name, icon: iconHTML(ic, 16), url: embedUrl(ic.url),
+      appId: 'web:' + ic.id, title: ic.name, icon: iconHTML(ic, 16), url: target,
       width: ic.w || 1000, height: ic.h || 680, mem: ic.mem, singleton: true,
     });
   }
@@ -353,10 +382,13 @@
   async function shortcutDialog(existing) {
     const vals = await ui.form({
       title: existing ? 'Edit shortcut' : 'New URL shortcut', okText: existing ? 'Save' : 'Create',
-      message: 'The page opens in its own window. Spotify links are converted to the embeddable player automatically.',
+      message: 'Many big sites (YouTube home, Google, GitHub…) refuse to be shown inside another page — those open in a browser tab. YouTube video/playlist, Spotify and Vimeo links are converted to embeddable players.',
       fields: [
         { name: 'name', label: 'Name', value: existing?.name || '', placeholder: 'e.g. Figma' },
         { name: 'url', label: 'URL', value: existing?.url || '', placeholder: 'https://example.com', type: 'text' },
+        { name: 'mode', label: 'Open in', type: 'select', value: existing?.mode || 'auto', options: [
+          { value: 'auto', label: 'Automatic (window, or browser tab if the site blocks embedding)' },
+          { value: 'window', label: 'Always a ulyOS window' }, { value: 'tab', label: 'Always a browser tab' }] },
       ],
       validate: (v) => (!normalizeUrl(v.url) ? 'Enter a valid http(s) URL' : null),
     });
@@ -364,11 +396,11 @@
     const url = normalizeUrl(vals.url);
     const name = vals.name.trim() || hostName(url).replace(/\.[^.]+$/, '').replace(/^./, (c) => c.toUpperCase());
     if (existing) {
-      Object.assign(existing, { name, url });
+      Object.assign(existing, { name, url, mode: vals.mode });
       ulyOS.audit("Shortcut '" + name + "' updated → " + hostName(url), 'ok');
       Desktop.render();
     } else {
-      const ic = addIcon({ id: 'u' + Date.now().toString(36), kind: 'url', name, url });
+      const ic = addIcon({ id: 'u' + Date.now().toString(36), kind: 'url', name, url, mode: vals.mode });
       ulyOS.audit("Shortcut '" + name + "' added to desktop → " + hostName(url), 'ok');
       Desktop.selected = new Set([ic.id]); paintSelection();
     }
@@ -432,6 +464,11 @@
   Desktop.init = function () {
     const saved = store.get('ulyos.icons', null);
     Desktop.icons = saved && Array.isArray(saved.list) ? saved.list : DEFAULT_ICONS.map((d) => ({ ...d }));
+    if (!store.get('ulyos.migr.dropPhotopeaSpotify', false)) {   // one-time: these are no longer stock icons
+      Desktop.icons = Desktop.icons.filter((i) => !['photopea', 'spotify'].includes(i.id));
+      store.set('ulyos.migr.dropPhotopeaSpotify', true);
+      if (saved) saveIcons();
+    }
     const host = $('#desktop');
     host.addEventListener('contextmenu', (e) => {
       if (e.target !== host) return;
@@ -702,7 +739,7 @@
           if (!v) return;
           try { await sec.removeSecret(v.old); ui.toast('Password removed', { type: 'warn' }); bus.emit('profile:change'); paint(); } catch (err) { ui.toast(err.message, { type: 'err' }); }
         } })) : null,
-        row('Auto-lock after idle', prot ? 'Focus inside a cross-origin embedded site (e.g. Photopea) counts as activity — lock manually when you step away' : 'Requires a password', autoSel),
+        row('Auto-lock after idle', prot ? 'Focus inside a cross-origin embedded site (e.g. Polotno) counts as activity — lock manually when you step away' : 'Requires a password', autoSel),
         row('Lock now', null, h('button', { class: 'btn sm', html: icon('lock', 14) + ' Lock', onclick: lockNow })),
         h('h3', { text: 'Backup' }),
         row('Export encrypted profile', 'Settings, desktop layout, audit log and app data (not sandbox files) as a .ulyprofile file', h('button', { class: 'btn sm', html: icon('download', 14) + ' Export…', onclick: async () => {

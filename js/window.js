@@ -555,7 +555,13 @@
       h('button', { class: 'frame-btn', title: 'Reload', 'aria-label': 'Reload', html: icon('refresh', 14), onclick: reload }),
       h('div', { class: 'frame-url', title: url, text: url }),
       local ? null : h('button', { class: 'frame-btn', title: 'Open in a browser tab', 'aria-label': 'Open in a browser tab', html: icon('external', 14), onclick: () => window.open(url, '_blank', 'noopener,noreferrer') }));
-    const stage = h('div', { class: 'frame-stage' }, iframe, loader);
+    // after load, offer an escape hatch: blocked sites render as a blank/"refused" page we cannot detect
+    const note = h('div', { class: 'frame-note', hidden: true },
+      h('span', { text: 'Blank page or “refused to connect”? This site may block embedding.' }),
+      h('button', { class: 'btn sm', text: 'Open in browser tab', onclick: () => window.open(url, '_blank', 'noopener,noreferrer') }),
+      h('button', { class: 'frame-btn', 'aria-label': 'Dismiss', html: icon('x', 13), onclick: () => { note.hidden = true; } }));
+    if (!local) iframe.addEventListener('load', () => { if (!loader.classList.contains('done') || iframe.getAttribute('src') === 'about:blank') return; note.hidden = false; setTimeout(() => { note.hidden = true; }, 12000); });
+    const stage = h('div', { class: 'frame-stage' }, iframe, loader, note);
     win.iframe = iframe;
     // attach first, then navigate (so `load` always fires on a connected frame)
     win._startFrame = () => { if (local) iframe.srcdoc = html; else iframe.src = url; arm(); };

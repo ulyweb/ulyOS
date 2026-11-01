@@ -212,6 +212,7 @@ input[type=color] { width: 44px; height: 28px; padding: 0; border: 1px solid var
 .frame-url { flex: 1; min-width: 0; font: 11px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 10px; border-radius: 6px; background: rgba(255, 255, 255, .03); }
 .frame-stage { position: relative; flex: 1; min-height: 0; background: #0b0b0e; }
 .app-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #0b0b0e; }
+.frame-note { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 10px; padding: 7px 8px 7px 14px; border-radius: 12px; background: rgba(14, 14, 18, .92); border: 1px solid var(--border-strong); box-shadow: 0 12px 34px rgba(0, 0, 0, .6); font-size: 12px; color: var(--muted); animation: fade-up .3s var(--ease) both; max-width: 94%; }
 .frame-loader { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #0b0b0e; z-index: 2; transition: opacity .4s, visibility .4s; text-align: center; padding: 20px; }
 .frame-loader.done { opacity: 0; visibility: hidden; pointer-events: none; }
 .frame-hint { color: var(--muted); font-size: 12px; max-width: 360px; line-height: 1.6; }

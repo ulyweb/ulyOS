@@ -27,7 +27,8 @@ Open http://localhost:8080 in Chrome or Edge (use `localhost` or HTTPS, not `fil
 | QR Seal | password-protected QR generator and reader (from ulyweb/qrcode) |
 | System Vault | key and passphrase generator with entropy scoring (from ulyweb/key) |
 | Crypto Compass | beginner crypto guide and prices (from ulyweb/crypto) |
-| Photopea, Polotno, GetArtCraft, Spotify | embedded web apps |
+| Polotno, GetArtCraft | embedded web apps |
+| Your own URL shortcuts | right-click the desktop → New URL shortcut (sites that forbid embedding open in a browser tab) |
 | Files, Task Manager, Settings | built in |
 
 The bundled apps run inside ulyOS windows with their browser storage redirected into the signed-in profile's encrypted vault.

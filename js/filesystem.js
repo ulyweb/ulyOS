@@ -101,15 +101,29 @@
     try {
       if (!navigator.storage || !navigator.storage.getDirectory) throw new Error('OPFS is not supported in this browser');
       const root = await navigator.storage.getDirectory();
-      const home = await root.getDirectoryHandle('ulyos-home', { create: true });
+      const base = await root.getDirectoryHandle('ulyos-home', { create: true });
+      const home = await base.getDirectoryHandle(ulyOS.security.profileId(), { create: true });
+      // One-time: adopt files created before profiles existed (they lived directly in ulyos-home/)
+      if (!localStorage.getItem('ulyos.legacyAdopted')) {
+        localStorage.setItem('ulyos.legacyAdopted', '1');
+        const legacy = [];
+        for await (const [name, hd] of base.entries()) if (!/^p_[0-9a-f]{10}$/.test(name)) legacy.push([name, hd]);
+        let empty = true;
+        for await (const _ of home.entries()) { empty = false; break; }
+        if (legacy.length && empty) {
+          for (const [name, hd] of legacy) { await copyEntry(hd, home, name); await base.removeEntry(name, { recursive: true }); }
+          ulyOS.audit('Adopted ' + legacy.length + ' pre-profile sandbox item(s) into this profile', 'info');
+        }
+      }
       for (const d of ['Documents', 'Pictures', 'Downloads', 'Wallpapers']) await home.getDirectoryHandle(d, { create: true });
-      if (!localStorage.getItem('ulyos.fs.seeded')) {
+      if (!ulyOS.util.store.get('ulyos.fs.seeded', false)) {
         const docs = await home.getDirectoryHandle('Documents');
         await writeFile(docs, 'Welcome.txt',
-          'Welcome to ulyOS.\n\nThis file lives in a sandboxed Origin Private File System inside your browser.\n' +
+          'Welcome to ulyOS.\n\nThis file lives in your profile\'s sandboxed Origin Private File System inside your browser.\n' +
           '• Create folders and files with the toolbar or right-click.\n• Double-click a text file to edit it (Ctrl+S saves).\n' +
+          '• Right-click a file → Encrypt… to lock it with a password (AES-256-GCM).\n' +
           '• Mount a real folder from your computer using "Open folder…" in the sidebar.\n• Drag files from your desktop into any Files window to upload them.\n');
-        localStorage.setItem('ulyos.fs.seeded', '1');
+        ulyOS.util.store.set('ulyos.fs.seeded', true);
       }
       roots.sandbox.handle = home;
       try { navigator.storage.persist?.(); } catch { /* ignore */ }
@@ -117,7 +131,7 @@
       roots.sandbox.error = err;
       ulyOS.audit('Sandbox filesystem unavailable: ' + err.message, 'err');
     }
-    roots.local.stored = (await idbGet('localRoot')) || null;
+    roots.local.stored = (await idbGet('localRoot:' + ulyOS.security.profileId())) || null;
     return !!roots.sandbox.handle;
   };
 
@@ -151,7 +165,7 @@
     }
     const handle = await window.showDirectoryPicker({ id: 'ulyos', mode: 'readwrite' });
     roots.local.handle = handle; roots.local.stored = handle;
-    await idbSet('localRoot', handle);
+    await idbSet('localRoot:' + ulyOS.security.profileId(), handle);
     ulyOS.audit("Local folder '" + handle.name + "' mounted with read/write access", 'ok');
     return true;
   }
@@ -164,6 +178,7 @@
   function kindOf(name, isDir) {
     if (isDir) return 'folder';
     const e = extOf(name);
+    if (e === 'uly') return 'locked';
     if (IMG_EXT.has(e) && e !== 'svg') return 'image';
     if (AUD_EXT.has(e)) return 'audio';
     if (VID_EXT.has(e)) return 'video';
@@ -171,8 +186,8 @@
     if (TEXT_EXT.has(e)) return 'text';
     return 'file';
   }
-  const KIND_ICON = { folder: 'folder', image: 'image', audio: 'music', video: 'video', pdf: 'file', text: 'text', file: 'file' };
-  const KIND_LABEL = { folder: 'Folder', image: 'Image', audio: 'Audio', video: 'Video', pdf: 'PDF document', text: 'Text file', file: 'File' };
+  const KIND_ICON = { folder: 'folder', image: 'image', audio: 'music', video: 'video', pdf: 'file', text: 'text', file: 'file', locked: 'lock' };
+  const KIND_LABEL = { folder: 'Folder', image: 'Image', audio: 'Audio', video: 'Video', pdf: 'PDF document', text: 'Text file', file: 'File', locked: 'Encrypted file' };
 
   async function looksBinary(file) {
     const buf = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
@@ -615,6 +630,8 @@
       ui.contextMenu(ev.clientX, ev.clientY, [
         { label: 'Open', icon: e.isDir ? 'folder' : 'file', disabled: multi, action: () => this.open(e) },
         !e.isDir ? { label: 'Open with Text Editor', icon: 'text', disabled: multi, action: () => this.openText(e) } : null,
+        !e.isDir && e.kind !== 'locked' ? { label: 'Encrypt…', icon: 'lock', action: () => this.encryptSel() } : null,
+        e.kind === 'locked' ? { label: 'Decrypt…', icon: 'lock', disabled: multi, action: () => this.decrypt(e) } : null,
         { separator: true },
         { label: 'Cut', icon: 'scissors', shortcut: 'Ctrl+X', action: () => this.setClip('cut') },
         { label: 'Copy', icon: 'copy', shortcut: 'Ctrl+C', action: () => this.setClip('copy') },
@@ -640,6 +657,7 @@
     /* ---------- operations ---------- */
     async open(e) {
       if (e.isDir) return this.enter(e.name);
+      if (e.kind === 'locked') return this.decrypt(e);
       const label = this.rootId + ':' + [this.pathLabel, e.name].filter(Boolean).join('/');
       try {
         if (['image', 'audio', 'video', 'pdf'].includes(e.kind)) { await openViewer(e.handle, e.kind, label); ulyOS.audit("Opened '" + e.name + "' in viewer", 'info'); return; }
@@ -702,6 +720,41 @@
         ulyOS.audit('Deleted ' + (names.length === 1 ? "'" + names[0] + "'" : names.length + ' items') + ' from /' + this.pathLabel, 'warn');
         this.sel.clear(); changed();
       } catch (err) { ui.toast('Delete failed: ' + err.message, { type: 'err' }); changed(); }
+    }
+
+    async encryptSel() {
+      const picks = this.entries.filter((e) => this.sel.has(e.name) && !e.isDir && e.kind !== 'locked');
+      if (!picks.length) { ui.toast('Select one or more files to encrypt', { type: 'info' }); return; }
+      const v = await ui.form({
+        title: 'Encrypt ' + (picks.length === 1 ? "'" + picks[0].name + "'" : picks.length + ' files'),
+        message: 'Creates a .uly file protected with AES-256-GCM (PBKDF2-SHA256, 600,000 iterations). The original is kept. There is no recovery if you forget the password.',
+        fields: [{ name: 'pw', label: 'Password', type: 'password' }, { name: 'pw2', label: 'Confirm password', type: 'password' }], okText: 'Encrypt',
+        validate: (x) => (x.pw.length < 8 ? 'Use at least 8 characters' : x.pw !== x.pw2 ? 'Passwords do not match' : null),
+      });
+      if (!v) return;
+      try {
+        for (const e of picks) {
+          const f = await e.handle.getFile();
+          if (f.size > 200 * 1024 * 1024) throw new Error(e.name + ' is too large to encrypt in the browser (200 MB max)');
+          const out = await ulyOS.crypto.encryptFile(new Uint8Array(await f.arrayBuffer()), v.pw, e.name);
+          const nm = await uniqueName(this.dir, e.name + '.uly', ' copy');
+          await writeFile(this.dir, nm, out);
+          ulyOS.audit("File '" + e.name + "' encrypted → '" + nm + "' (" + fmtBytes(out.length) + ')', 'ok');
+        }
+        ui.toast('Encrypted ' + picks.length + ' file(s)', { type: 'ok' }); changed();
+      } catch (err) { ui.toast('Encryption failed: ' + err.message, { type: 'err' }); }
+    }
+    async decrypt(e) {
+      const pw = await ui.prompt({ title: "Decrypt '" + e.name + "'", label: 'Password', okText: 'Decrypt', validate: (x) => (x ? null : 'Enter the password') });
+      if (pw == null) return;
+      try {
+        const f = await e.handle.getFile();
+        const { name, data } = await ulyOS.crypto.decryptFile(new Uint8Array(await f.arrayBuffer()), pw);
+        const nm = await uniqueName(this.dir, name, ' (decrypted)');
+        await writeFile(this.dir, nm, data);
+        ulyOS.audit("File '" + e.name + "' decrypted → '" + nm + "'", 'ok');
+        ui.toast("Decrypted to '" + nm + "'", { type: 'ok' }); this.sel = new Set([nm]); changed();
+      } catch (err) { ui.toast(err.message, { type: 'err' }); ulyOS.audit("Decrypting '" + e.name + "' failed", 'warn'); }
     }
 
     setClip(mode) {

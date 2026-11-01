@@ -23,13 +23,13 @@
     HISTORY: 90,
     LOG_MAX: 1000,
   };
-  let ramLimit = store.get('ulyos.ramLimit', 4096);
+  let ramLimit = 4096;
+  let started = false;
   const bootAt = Date.now();
 
   /* ---------------- Audit trail ---------------- */
-  let log = store.get('ulyos.audit', []);
-  if (!Array.isArray(log)) log = [];
-  const saveLog = debounce(() => store.set('ulyos.audit', log), 400);
+  let log = [];   // filled from the signed-in profile's vault on session start
+  const saveLog = debounce(() => { if (started) store.set('ulyos.audit', log); }, 400);
   function addLog(e) {
     const entry = { ts: e.ts || Date.now(), level: e.level || 'info', msg: String(e.msg) };
     log.push(entry);
@@ -38,7 +38,7 @@
     bus.emit('audit:entry', entry);
   }
   bus.on('audit', addLog);
-  window.addEventListener('beforeunload', () => store.set('ulyos.audit', log));
+  window.addEventListener('beforeunload', () => { if (started) store.set('ulyos.audit', log); });
   T.getLog = () => log.slice();
   T.fmtLine = (e) => fmtTime(e.ts) + ' - ' + e.msg;
 
@@ -148,12 +148,21 @@
   bus.on('window:minimize', (w) => ulyOS.audit("Window '" + w.title + "' minimized" + (w.iframe ? ' (iframe throttled, ' + Math.round(estimate(w)) + 'MB resident)' : ''), 'info'));
   bus.on('window:restore', (w) => ulyOS.audit("Window '" + w.title + "' restored", 'info'));
 
-  /* ---------------- Daemon start ---------------- */
-  ulyOS.audit('telemetryd started · RAM budget ' + ramLimit + 'MB', 'sys');
-  refreshStorage();
-  setInterval(refreshStorage, 15000);
-  setInterval(sample, 1000);
-  sample();
+  /* ---------------- Daemon start (after a profile signs in) ---------------- */
+  function start() {
+    if (started) return;
+    started = true;
+    const saved = store.get('ulyos.audit', []);
+    log = (Array.isArray(saved) ? saved : []).concat(log);
+    ramLimit = store.get('ulyos.ramLimit', 4096);
+    stats.ramLimit = ramLimit;
+    ulyOS.audit('telemetryd started · RAM budget ' + ramLimit + 'MB', 'sys');
+    refreshStorage();
+    setInterval(refreshStorage, 15000);
+    setInterval(sample, 1000);
+    sample();
+  }
+  bus.on('session:start', start);
 
   T.stats = stats;
   T.setRamLimit = (mb) => { ramLimit = mb; store.set('ulyos.ramLimit', mb); ulyOS.audit('RAM budget set to ' + mb + 'MB', 'info'); sample(); };

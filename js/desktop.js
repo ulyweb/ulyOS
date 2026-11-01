@@ -19,7 +19,7 @@
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
     cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: false,
   };
-  let settings = { ...DEFAULT_SETTINGS, ...store.get('ulyos.settings', {}) };
+  let settings = { ...DEFAULT_SETTINGS };   // replaced with the profile's saved settings on sign-in
   const Settings = (ulyOS.settings = {
     get: (k) => settings[k],
     all: () => ({ ...settings }),
@@ -157,6 +157,10 @@
     { id: 'polotno', kind: 'url', name: 'Polotno', url: 'https://studio.polotno.com/', glyph: 'shapes', mem: 95, w: 1100, h: 720, tint: '#c4b5fd' },
     { id: 'getartcraft', kind: 'url', name: 'GetArtCraft', url: 'https://app.getartcraft.com/create-image', glyph: 'sparkles', mem: 140, w: 1100, h: 720, tint: '#fbbf24' },
     { id: 'spotify', kind: 'url', name: 'Spotify', url: 'https://open.spotify.com/embed/playlist/37i9dQZF1DXcBWIGoYBM5M?utm_source=generator&theme=0', glyph: 'headphones', mem: 70, w: 560, h: 700, tint: '#4ade80' },
+    { id: 'trustvault', kind: 'local', name: 'TrustVault', file: 'apps/trustvault.html', glyph: 'shield', mem: 48, w: 1180, h: 760, tint: '#5eead4' },
+    { id: 'qrseal', kind: 'local', name: 'QR Seal', file: 'apps/qrseal.html', glyph: 'qr', mem: 60, w: 980, h: 760, tint: '#c4b5fd' },
+    { id: 'systemvault', kind: 'local', name: 'System Vault', file: 'apps/systemvault.html', glyph: 'key', mem: 62, w: 1100, h: 760, tint: '#fb7185' },
+    { id: 'cryptocompass', kind: 'local', name: 'Crypto Compass', file: 'apps/cryptocompass.html', glyph: 'compass', mem: 40, w: 1100, h: 760, tint: '#fbbf24' },
     { id: 'taskmgr', kind: 'sys', sys: 'taskmgr', name: 'Task Manager' },
     { id: 'settings', kind: 'sys', sys: 'settings', name: 'Settings' },
   ];
@@ -171,8 +175,19 @@
     return '<span class="letter-ico" style="--h:' + hueOf(hostName(ic.url || ic.name)) + ';width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.62) + 'px">' + letter + fav + '</span>';
   }
 
-  function launch(ic) {
+  async function launch(ic) {
     if (ic.kind === 'sys') { SYS_APPS[ic.sys].open(); return; }
+    if (ic.kind === 'local') {
+      const existing = WM.byApp('web:' + ic.id)[0];
+      if (existing) { WM.focus(existing); return; }
+      try {
+        const r = await fetch(ic.file);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const html = ulyOS.security.injectShim(await r.text(), ic.id);   // storage → encrypted profile vault
+        WM.open({ appId: 'web:' + ic.id, title: ic.name, icon: iconHTML(ic, 16), html, width: ic.w || 1000, height: ic.h || 700, mem: ic.mem, singleton: true });
+      } catch (err) { ui.toast("Could not load '" + ic.name + "': " + err.message + ' (serve ulyOS over http://, not file://)', { type: 'err' }); }
+      return;
+    }
     WM.open({
       appId: 'web:' + ic.id, title: ic.name, icon: iconHTML(ic, 16), url: embedUrl(ic.url),
       width: ic.w || 1000, height: ic.h || 680, mem: ic.mem, singleton: true,
@@ -501,7 +516,7 @@
     const list = $('#sm-list'), search = $('#sm-search');
     const entries = () => {
       const out = Object.entries(SYS_APPS).map(([k, a]) => ({ name: a.name, html: icon(a.icon, 18), run: a.open }));
-      DEFAULT_ICONS.filter((d) => d.kind === 'url').forEach((d) => out.push({ name: d.name, html: iconHTML(d, 18), run: () => launch(d) }));
+      DEFAULT_ICONS.filter((d) => d.kind !== 'sys').forEach((d) => out.push({ name: d.name, html: iconHTML(d, 18), run: () => launch(d) }));
       Desktop.icons.filter((i) => i.kind === 'url' && !DEFAULT_ICONS.some((d) => d.id === i.id)).forEach((i) => out.push({ name: i.name, html: iconHTML(i, 18), run: () => launch(i) }));
       return out;
     };
@@ -527,7 +542,39 @@
       document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.();
     });
     $('#sm-restart').addEventListener('click', () => { closeMenu(); restart(); });
+    $('#sm-lock').addEventListener('click', () => { closeMenu(); lockNow(); });
+
+    /* profile chip */
+    const chip = $('#tray-user');
+    const paintChip = () => {
+      const p = ulyOS.security.profile();
+      if (!p) return;
+      chip.replaceChildren(...[h('span', { class: 'chip-av', style: { '--c': p.color }, text: p.name.trim().charAt(0).toUpperCase() }), h('span', { class: 'chip-name', text: p.name }), p.protected ? h('span', { class: 'chip-lock', html: icon('lock', 12) }) : null].filter(Boolean));
+      chip.title = 'Profile: ' + p.name;
+    };
+    paintChip();
+    bus.on('profile:change', paintChip);
+    chip.addEventListener('click', (e) => {
+      const r = chip.getBoundingClientRect();
+      const prot = ulyOS.security.isProtected();
+      ui.contextMenu(r.left, r.top - 8, [
+        { label: ulyOS.security.profile().name, icon: 'home', disabled: true },
+        { separator: true },
+        { label: prot ? 'Lock now' : 'Set a password to enable lock…', icon: 'lock', action: lockNow },
+        { label: 'Security settings…', icon: 'shield', action: () => SettingsApp.open('security') },
+        { separator: true },
+        { label: 'Switch profile / sign out', icon: 'power', danger: true, action: () => ulyOS.security.signOut() },
+      ]);
+      const m = document.querySelector('.ctx-menu');
+      if (m) { m.style.top = Math.max(8, r.top - m.offsetHeight - 8) + 'px'; }
+      e.stopPropagation();
+    });
   };
+
+  function lockNow() {
+    if (ulyOS.security.isProtected()) ulyOS.security.lock('manual');
+    else { ui.toast('This profile has no password yet — set one to enable locking', { type: 'info' }); SettingsApp.open('security'); }
+  }
 
   /* ==========================================================================
      Boot sequence
@@ -603,6 +650,82 @@
       render: (win) => buildSettings(win, tab || 'appearance'),
     });
   };
+
+
+  /* ---- Security tab ---- */
+  function securitySection() {
+    const wrap = h('div', {});
+    const sec = ulyOS.security;
+    const download = (blob, name) => {
+      const a = h('a', { href: URL.createObjectURL(blob), download: name });
+      document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    };
+    const row = (label, desc, ctl) => h('div', { class: 'set-row' }, h('div', {}, h('div', { class: 'set-label', text: label }), desc ? h('div', { class: 'set-desc', text: desc }) : null), ctl);
+    const credField = [{ name: 'type', label: 'Type', type: 'select', value: 'password', options: [{ value: 'password', label: 'Password (recommended)' }, { value: 'pin', label: 'PIN (digits only — weaker)' }] }];
+    const validateNew = (v) => {
+      if (v.type === 'pin' ? !/^\d{4,12}$/.test(v.pw) : v.pw.length < 8) return v.type === 'pin' ? 'PIN must be 4–12 digits' : 'Use at least 8 characters';
+      if (v.pw !== v.pw2) return 'Entries do not match';
+      if (v.type === 'password' && ulyOS.crypto.strength(v.pw).level < 2) return 'That password is too weak';
+      return null;
+    };
+
+    function paint() {
+      const p = sec.profile(), info = sec.vaultInfo(), prot = p.protected;
+      const swatches = h('div', { class: 'swatches' }, sec.COLORS.map((c) => h('button', { class: 'swatch' + (p.color === c ? ' active' : ''), style: { background: c }, 'aria-label': c, onclick: () => { sec.setColor(c); paint(); } })));
+      const nameIn = h('input', { class: 'input', value: p.name, maxLength: 24, style: { width: '170px' } });
+      const autoSel = h('select', { class: 'input sm', disabled: !prot, onchange: (e) => sec.setAutoLock(+e.target.value) },
+        [[0, 'Never'], [1, '1 minute'], [2, '2 minutes'], [5, '5 minutes'], [10, '10 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']].map(([v, l]) => h('option', { value: v, text: l, selected: v === sec.getAutoLock() })));
+
+      wrap.replaceChildren(
+        h('div', { class: 'sec-status ' + (prot ? 'ok' : 'bad') },
+          h('div', { class: 'sec-ico', html: icon(prot ? 'lock' : 'shield', 22) }),
+          h('div', {}, h('div', { class: 'set-label', text: prot ? 'Vault encrypted at rest' : 'Vault is NOT encrypted' }),
+            h('div', { class: 'set-desc', text: prot ? 'AES-256-GCM · PBKDF2-SHA256 × ' + info.iterations.toLocaleString() + ' · ' + info.keys + ' entries · ' + (info.bytes / 1024).toFixed(1) + ' KB on disk'
+              : 'Anyone using this browser (and any page on this site’s origin) can read this profile’s data. Set a password to encrypt it.' }))),
+        h('h3', { text: 'Profile' }),
+        row('Name', null, h('div', { class: 'inline-form', style: { width: 'auto' } }, nameIn, h('button', { class: 'btn sm', text: 'Rename', onclick: () => { sec.rename(nameIn.value); paint(); } }))),
+        row('Color', null, swatches),
+        h('h3', { text: 'Lock & password' }),
+        row(prot ? 'Change ' + (p.cred === 'pin' ? 'PIN' : 'password') : 'Set a password', prot ? 'Re-encrypts the vault with a fresh salt' : 'Encrypts this profile’s settings, app data and audit log',
+          h('div', { class: 'btn-row' },
+            h('button', { class: 'btn sm primary', text: prot ? 'Change…' : 'Set password…', onclick: async () => {
+              const v = await ui.form({ title: prot ? 'Change password' : 'Set a password', message: prot ? null : 'There is no recovery. If you forget it, the encrypted data cannot be restored — export a backup below.',
+                fields: [...(prot ? [{ name: 'old', label: 'Current ' + (p.cred === 'pin' ? 'PIN' : 'password'), type: 'password' }] : []), ...credField, { name: 'pw', label: 'New secret', type: 'password' }, { name: 'pw2', label: 'Confirm', type: 'password' }],
+                okText: 'Save', validate: (x) => (prot && !x.old ? 'Enter your current secret' : validateNew(x)) });
+              if (!v) return;
+              try { await sec.changeSecret(prot ? v.old : null, v.pw, v.type); ui.toast('Vault re-encrypted', { type: 'ok' }); bus.emit('profile:change'); paint(); }
+              catch (err) { ui.toast(err.message, { type: 'err' }); }
+            } }),
+            h('button', { class: 'btn sm', text: 'Suggest', title: 'Generate a strong random password', onclick: () => ui.form({ title: 'Generated password', message: ulyOS.crypto.generatePassword(24) + '\n\nSelect and copy it, then use “Set password”. It is not saved anywhere.', fields: [], okText: 'Done', hideCancel: true }) }))),
+        prot ? row('Remove password', 'Stores the vault unencrypted', h('button', { class: 'btn sm danger', text: 'Remove…', onclick: async () => {
+          const v = await ui.form({ title: 'Remove password?', message: 'The vault will be saved unencrypted and locking is disabled.', fields: [{ name: 'old', label: 'Current secret', type: 'password' }], okText: 'Remove', danger: true, validate: (x) => (x.old ? null : 'Required') });
+          if (!v) return;
+          try { await sec.removeSecret(v.old); ui.toast('Password removed', { type: 'warn' }); bus.emit('profile:change'); paint(); } catch (err) { ui.toast(err.message, { type: 'err' }); }
+        } })) : null,
+        row('Auto-lock after idle', prot ? 'Focus inside a cross-origin embedded site (e.g. Photopea) counts as activity — lock manually when you step away' : 'Requires a password', autoSel),
+        row('Lock now', null, h('button', { class: 'btn sm', html: icon('lock', 14) + ' Lock', onclick: lockNow })),
+        h('h3', { text: 'Backup' }),
+        row('Export encrypted profile', 'Settings, desktop layout, audit log and app data (not sandbox files) as a .ulyprofile file', h('button', { class: 'btn sm', html: icon('download', 14) + ' Export…', onclick: async () => {
+          const v = await ui.form({ title: 'Encrypt backup', message: 'Choose the password that will protect the backup file. Restoring it creates a profile protected with this password.',
+            fields: [{ name: 'pw', label: 'Backup password', type: 'password' }, { name: 'pw2', label: 'Confirm', type: 'password' }], okText: 'Export',
+            validate: (x) => (x.pw.length < 8 ? 'Use at least 8 characters' : x.pw !== x.pw2 ? 'Entries do not match' : null) });
+          if (!v) return;
+          try { download(await sec.exportProfile(v.pw), p.name.replace(/[^\w.-]+/g, '_') + '-' + new Date().toISOString().slice(0, 10) + '.ulyprofile'); ulyOS.audit('Encrypted profile backup exported', 'ok'); ui.toast('Encrypted backup saved', { type: 'ok' }); }
+          catch (err) { ui.toast('Export failed: ' + err.message, { type: 'err' }); }
+        } })),
+        row('Restore a backup', 'On the profile screen: sign out → Add profile → Import encrypted backup', h('button', { class: 'btn sm', text: 'Sign out…', onclick: () => sec.signOut() })),
+        h('h3', { text: 'Danger zone' }),
+        row('Delete this profile', 'Erases its vault, sandbox files and settings from this browser', h('button', { class: 'btn sm danger', text: 'Delete…', onclick: async () => {
+          const v = await ui.form({ title: "Delete '" + p.name + "'?", message: 'This permanently erases everything in this profile and signs you out.', fields: prot ? [{ name: 'old', label: 'Enter your ' + (p.cred === 'pin' ? 'PIN' : 'password') + ' to confirm', type: 'password' }] : [], okText: 'Delete forever', danger: true, validate: (x) => (prot && !x.old ? 'Required' : null) });
+          if (!v) return;
+          try { await sec.deleteSelf(v.old); } catch (err) { ui.toast(err.message, { type: 'err' }); }
+        } })),
+        h('p', { class: 'set-desc', style: { marginTop: '18px' }, text: 'Note: Files in the sandbox are isolated per profile but are not encrypted at rest — right-click a file in Files → Encrypt… to protect it. GitHub Pages serves every ulyweb.github.io project from one origin, so other pages there share this browser’s storage; an unencrypted profile is readable by them.' }));
+    }
+    bus.on('profile:change', () => { if (wrap.isConnected) paint(); });
+    paint();
+    return wrap;
+  }
 
   function buildSettings(win, startTab) {
     const sw = (key, after) => h('label', { class: 'switch' },
@@ -682,6 +805,7 @@
         row('Restore stock icons', 'Bring back deleted default icons', h('button', { class: 'btn sm', text: 'Restore', onclick: () => { missingDefaults().length ? restoreDefaults() : ui.toast('All stock icons are already on the desktop'); } })),
         h('h3', { text: 'Taskbar' }),
         row('Show seconds in clock', null, sw('clockSeconds'))),
+      security: securitySection(),
       system: h('div', {},
         h('h3', { text: 'Storage' }),
         row('Sandbox usage', 'Origin-private storage for this site', storageEl),
@@ -698,7 +822,7 @@
           h('div', { text: 'OPFS: ' + (ulyOS.FS.roots.sandbox.handle ? 'ready' : 'unavailable') }),
           h('div', { text: 'Directory picker: ' + (window.showDirectoryPicker ? 'supported' : 'unsupported') }))),
     };
-    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['system', 'cpu', 'System']];
+    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System']];
     const navBtns = {};
     const content = h('div', { class: 'set-content' });
     function show(id) {
@@ -714,13 +838,18 @@
   /* ==========================================================================
      Start-up
      ========================================================================== */
-  function init() {
+  /* Runs once a profile has signed in (security.js emits session:start). */
+  function startSession() {
+    settings = { ...DEFAULT_SETTINGS, ...store.get('ulyos.settings', {}) };
     applySettings();
-    Cursor.init();
     Desktop.init();
     Taskbar.init();
-    bus.on('fs:change', () => { /* hook for future desktop-backed folders */ });
     boot(true);
+  }
+  function init() {
+    applySettings();   // defaults — gives the profile screen the custom cursor + glass look
+    Cursor.init();
+    bus.on('session:start', startSession);
   }
   ulyOS.restart = restart;
   ulyOS.launch = launch;

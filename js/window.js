@@ -38,7 +38,7 @@
       for (const [k, v] of Object.entries(props)) {
         if (v == null || v === false) continue;
         if (k === 'class') n.className = v;
-        else if (k === 'style' && typeof v === 'object') Object.assign(n.style, v);
+        else if (k === 'style' && typeof v === 'object') { for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) n.style.setProperty(sk, sv); else n.style[sk] = sv; } }
         else if (k === 'dataset') Object.assign(n.dataset, v);
         else if (k === 'html') n.innerHTML = v;
         else if (k === 'text') n.textContent = v;
@@ -74,10 +74,19 @@
   };
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /* Storage goes through a swappable backend: before sign-in it is plain localStorage;
+     security.js swaps in the signed-in profile's (optionally encrypted) vault. */
+  const backend = {
+    getItem: (k) => localStorage.getItem(k),
+    setItem: (k, v) => localStorage.setItem(k, v),
+    removeItem: (k) => localStorage.removeItem(k),
+  };
+  let activeBackend = backend;
   const store = {
-    get(k, fb) { try { const v = localStorage.getItem(k); return v == null ? fb : JSON.parse(v); } catch { return fb; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
-    del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } },
+    use(b) { activeBackend = b || backend; },
+    get(k, fb) { try { const v = activeBackend.getItem(k); return v == null ? fb : JSON.parse(v); } catch { return fb; } },
+    set(k, v) { try { activeBackend.setItem(k, JSON.stringify(v)); return true; } catch { return false; } },
+    del(k) { try { activeBackend.removeItem(k); } catch { /* ignore */ } },
   };
 
   /* Animation timing is driven by CSS vars/body class set by Settings. */
@@ -137,6 +146,9 @@
     sliders: '<path d="M5 4v16M12 4v16M19 4v16"/><circle cx="5" cy="9" r="2"/><circle cx="12" cy="15" r="2"/><circle cx="19" cy="8" r="2"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     minus: '<path d="M5 12h14"/>',
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h3M20 17v4M17 20v.01"/>',
+    key: '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M16 7l3 3M14 9l2 2"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
   };
   const icon = (name, size = 18) =>
     '<svg class="ico" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
@@ -504,17 +516,20 @@
   const IFRAME_ALLOW = 'clipboard-read; clipboard-write; fullscreen; autoplay; encrypted-media; picture-in-picture; microphone; camera; display-capture; accelerometer; gyroscope';
 
   /** Build the chrome-less iframe application surface. */
-  function buildFrameApp(win, url) {
+  function buildFrameApp(win, url, html) {
     const t0 = performance.now();
     const loader = h('div', { class: 'frame-loader' },
       h('div', { class: 'spinner' }),
       h('div', { class: 'frame-hint', text: 'Loading ' + safeHost(url) + '…' }));
     const iframe = h('iframe', { class: 'app-frame', title: win.title, referrerPolicy: 'no-referrer-when-downgrade' });
+    const local = html != null;
+    if (local) iframe.dataset.local = '1';
     iframe.setAttribute('allow', IFRAME_ALLOW);
     iframe.setAttribute('allowfullscreen', '');
     const reload = () => {
       loader.classList.remove('done', 'slow');
       loader.querySelector('.frame-hint').textContent = 'Reloading…';
+      if (local) { iframe.srcdoc = html; arm(); return; }
       const s = iframe.src;
       iframe.src = 'about:blank';
       setTimeout(() => { iframe.src = s; arm(); }, 40);
@@ -530,7 +545,7 @@
       }, 9000);
     };
     iframe.addEventListener('load', () => {
-      if (iframe.src === 'about:blank' || !iframe.getAttribute('src') || iframe.getAttribute('src') === 'about:blank') return;
+      if (!local && (iframe.src === 'about:blank' || !iframe.getAttribute('src') || iframe.getAttribute('src') === 'about:blank')) return;
       loader.classList.add('done');
       clearTimeout(slowT);
       ulyOS.audit("Window '" + win.title + "': iframe loaded from " + safeHost(url) + ' in ' + Math.round(performance.now() - t0) + 'ms', 'ok');
@@ -539,11 +554,11 @@
     const bar = h('div', { class: 'frame-bar' },
       h('button', { class: 'frame-btn', title: 'Reload', 'aria-label': 'Reload', html: icon('refresh', 14), onclick: reload }),
       h('div', { class: 'frame-url', title: url, text: url }),
-      h('button', { class: 'frame-btn', title: 'Open in a browser tab', 'aria-label': 'Open in a browser tab', html: icon('external', 14), onclick: () => window.open(url, '_blank', 'noopener,noreferrer') }));
+      local ? null : h('button', { class: 'frame-btn', title: 'Open in a browser tab', 'aria-label': 'Open in a browser tab', html: icon('external', 14), onclick: () => window.open(url, '_blank', 'noopener,noreferrer') }));
     const stage = h('div', { class: 'frame-stage' }, iframe, loader);
     win.iframe = iframe;
     // attach first, then navigate (so `load` always fires on a connected frame)
-    win._startFrame = () => { iframe.src = url; arm(); };
+    win._startFrame = () => { if (local) iframe.srcdoc = html; else iframe.src = url; arm(); };
     return h('div', { class: 'frame-app' }, bar, stage);
   }
   function safeHost(u) { try { return new URL(u).host; } catch { return u; } }
@@ -598,8 +613,9 @@
     win.el = el; win.body = body; win.titlebar = titlebar;
 
     // content
-    if (opts.url) {
-      body.append(buildFrameApp(win, opts.url));
+    if (opts.url || opts.html != null) {
+      win.local = opts.html != null;
+      body.append(buildFrameApp(win, opts.url || 'local app · ' + win.title, opts.html));
       el.classList.add('has-iframe');
     } else if (typeof opts.render === 'function') {
       // appended before render so render() can measure/focus
@@ -610,7 +626,7 @@
     el.style.zIndex = ++zCounter;
     registry.set(win.id, win);
 
-    if (!opts.url && typeof opts.render === 'function') {
+    if (!opts.url && opts.html == null && typeof opts.render === 'function') {
       const node = opts.render(win);
       if (node) body.append(node);
     } else if (opts.content) {
@@ -641,7 +657,7 @@
     return [
       { label: win.minimized ? 'Restore' : 'Minimize', icon: 'minus', action: () => (win.minimized ? WM.focus(win) : WM.minimize(win)) },
       win.resizable ? { label: win.maximized ? 'Restore size' : 'Maximize', icon: 'fullscreen', action: () => WM.maximize(win) } : null,
-      win.url ? { label: 'Open in browser tab', icon: 'external', action: () => window.open(win.url, '_blank', 'noopener,noreferrer') } : null,
+      win.url && !win.local ? { label: 'Open in browser tab', icon: 'external', action: () => window.open(win.url, '_blank', 'noopener,noreferrer') } : null,
       { separator: true },
       { label: 'Close', icon: 'x', danger: true, action: () => WM.close(win) },
     ].filter(Boolean);

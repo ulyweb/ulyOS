@@ -9,10 +9,10 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23000'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%23fff' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css">
 </head>
-<body class="booting">
+<body>
 
   <!-- Boot sequence -->
-  <div id="boot" aria-live="polite">
+  <div id="boot" aria-live="polite" hidden>
     <div class="boot-core">
       <svg class="boot-logo" viewBox="0 0 80 80" width="76" height="76" aria-hidden="true">
         <circle class="ring" cx="40" cy="40" r="28" />
@@ -26,6 +26,9 @@
   </div>
 
   <div id="wallpaper" class="wp-void"></div>
+
+  <!-- Profile picker / sign-in / lock screen (js/security.js) -->
+  <div id="auth" aria-live="polite"></div>
 
   <main id="desktop" aria-label="Desktop"></main>
   <div id="cell-hint"></div>
@@ -44,6 +47,7 @@
       <button id="tray-ram" class="tray-ram" title="Open Task Manager">
         <span class="lbl">RAM</span><span class="v mono">— MB</span><span class="meter"><i></i></span>
       </button>
+      <button id="tray-user" class="tray-user" aria-label="Profile menu"></button>
       <div id="tray-clock" class="tray-clock"></div>
       <button id="tb-desk" class="tb-desk" title="Show desktop" aria-label="Show desktop"></button>
     </div>
@@ -54,6 +58,7 @@
     <div class="sm-search"><input id="sm-search" class="input" type="search" placeholder="Search apps…" autocomplete="off" spellcheck="false"></div>
     <div id="sm-list" class="sm-list"></div>
     <div class="sm-foot">
+      <button id="sm-lock" class="btn sm">Lock</button>
       <button id="sm-fullscreen" class="btn sm">Fullscreen</button>
       <button id="sm-restart" class="btn sm danger">Restart</button>
     </div>
@@ -65,6 +70,7 @@
   <noscript><p style="color:#fff;padding:2rem">ulyOS needs JavaScript.</p></noscript>
 
   <script src="js/window.js"></script>
+  <script src="js/security.js"></script>
   <script src="js/telemetry.js"></script>
   <script src="js/filesystem.js"></script>
   <script src="js/desktop.js"></script>

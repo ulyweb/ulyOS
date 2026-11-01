@@ -430,7 +430,8 @@
     document.body.classList.add('auth-open');
     const card = h('div', { class: 'auth-card' }, view);
     el.replaceChildren(h('div', { class: 'auth-brand' }, h('span', { class: 'auth-logo', html: '<svg viewBox="0 0 80 80" width="28" height="28"><circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="40" cy="40" r="5" fill="currentColor"/></svg>' }), h('span', { text: 'uly' }), h('b', { text: 'OS' })), card,
-      h('div', { class: 'auth-foot' }, hasCrypto ? 'PBKDF2-SHA256 · AES-256-GCM · everything stays on this device' : '⚠ Secure context required (HTTPS or localhost) — encryption unavailable'));
+      h('div', { class: 'auth-foot' }, hasCrypto ? 'PBKDF2-SHA256 · AES-256-GCM · everything stays on this device' : '⚠ Secure context required (HTTPS or localhost) — encryption unavailable',
+        ulyOS.admin && ulyOS.admin.enabled() ? [h('span', { class: 'sep', text: ' | ' }), h('a', { href: '#', class: 'footlink', text: 'Contact Admin', onclick: (e) => { e.preventDefault(); ulyOS.admin.contact(); } })] : null));
     const f = card.querySelector('input:not([type=hidden]),button.primary');
     setTimeout(() => f && f.focus && f.focus(), 40);
   }
@@ -550,6 +551,8 @@
     const swatches = h('div', { class: 'swatches' });
     const prev = h('div', { class: 'prev' });
     const credBox = h('div', { class: 'seg' });
+    const notify = !!(ulyOS.admin && ulyOS.admin.notifyEnabled());
+    const contact = h('input', { class: 'input', type: 'email', placeholder: 'Your email (optional — lets the admin reach you)', autocomplete: 'email', 'aria-label': 'Optional contact email' });
 
     const paintPrev = () => prev.replaceChildren(avatar({ name: name.value || '?', color }, 72));
     const paintSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { type: 'button', class: 'swatch' + (c === color ? ' active' : ''), style: { background: c }, 'aria-label': c, onclick: () => { color = c; paintSw(); paintPrev(); } })));
@@ -577,6 +580,7 @@
       try {
         const { profile, opened } = await createProfile({ name: name.value, color, secret: sec, cred });
         busy = false;
+        if (ulyOS.admin) ulyOS.admin.notifyNewProfile(profile, { contact: contact.value.trim().slice(0, 120) });
         await startSession(profile, opened);
       } catch (ex) { busy = false; btn.disabled = false; btn.textContent = 'Create profile'; err.textContent = 'Could not create profile: ' + ex.message; console.error(ex); }
     };
@@ -586,7 +590,9 @@
       first ? h('p', { class: 'auth-sub', text: 'Your desktop, files and app data live in a profile. Protect it with a password to encrypt everything at rest.' }) : null,
       prev, name, swatches,
       h('label', { class: 'check' }, protect, h('span', { text: 'Protect with a password (recommended)' })),
-      secretBox, err, btn,
+      secretBox,
+      notify ? h('div', { class: 'notice' }, h('div', { class: 'notice-text', html: 'ℹ ' }, ulyOS.admin.disclosure), contact) : null,
+      err, btn,
       h('div', { class: 'auth-links' },
         first ? null : h('button', { type: 'button', class: 'link', onclick: () => showAuth(pickView()), text: '← All profiles' }),
         h('button', { type: 'button', class: 'link', onclick: () => showAuth(importView(first)), text: 'Import encrypted backup…' })));
@@ -609,13 +615,16 @@
         const b = await decryptBackup(await file.files[0].text(), pass.value);
         const { profile, opened } = await createProfile({ name: b.name, color: b.color, secret: pass.value, cred: 'password', data: b.data });
         busy = false;
+        if (ulyOS.admin) ulyOS.admin.notifyNewProfile(profile, { source: 'import' });
         await startSession(profile, opened);
         ulyOS.audit("Profile '" + profile.name + "' restored from encrypted backup (protected with the backup password)", 'ok');
       } catch (ex) { busy = false; btn.disabled = false; btn.textContent = 'Import profile'; err.textContent = ex.message; }
     } },
       h('h2', { class: 'auth-name', text: 'Import encrypted backup' }),
       h('p', { class: 'auth-sub', text: 'Restores desktop layout, settings, audit log and app data from a .ulyprofile file. Sandbox files are not included. The new profile is protected with the backup password.' }),
-      file, pass, err, btn,
+      file, pass,
+      ulyOS.admin && ulyOS.admin.notifyEnabled() ? h('p', { class: 'auth-note', text: 'The site admin is notified by email that a profile was restored (profile name only). Passwords, keys, files and app data are never sent.' }) : null,
+      err, btn,
       h('div', { class: 'auth-links' }, h('button', { type: 'button', class: 'link', onclick: () => showAuth(first ? createView({ first: true }) : pickView()), text: '← Back' })));
     return form;
   }

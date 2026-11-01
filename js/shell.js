@@ -10,7 +10,7 @@
 (function () {
   'use strict';
 
-  const { h, icon, clamp, pad2, dur, animOn } = ulyOS.util;
+  const { h, icon, clamp, pad2, dur, animOn, fmtClock } = ulyOS.util;
   const { WM, ui, bus } = ulyOS;
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -84,7 +84,7 @@
     const clock = $('#tray-clock');
     if (!clock) return;
     const d = new Date();
-    clock.innerHTML = '<b>' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + (get('clockSeconds') ? ':' + pad2(d.getSeconds()) : '') +
+    clock.innerHTML = '<b>' + fmtClock(d, { seconds: !!get('clockSeconds'), h24: get('clockFormat') !== '12' }) +
       '</b><span>' + d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + '</span>';
   };
 
@@ -329,6 +329,11 @@
     $('#sm-fullscreen').addEventListener('click', () => { closeMenu(); document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.(); });
     $('#sm-restart').addEventListener('click', () => { closeMenu(); API().restart(); });
     $('#sm-lock').addEventListener('click', () => { closeMenu(); API().lockNow(); });
+    const contactBtn = $('#sm-contact'), offBtn = $('#sm-offline');
+    contactBtn.hidden = !(ulyOS.admin && ulyOS.admin.enabled());
+    offBtn.hidden = !!(ulyOS.config && ulyOS.config.OFFLINE);
+    contactBtn.addEventListener('click', () => { closeMenu(); ulyOS.admin.contact(); });
+    offBtn.addEventListener('click', () => { closeMenu(); ulyOS.offline.download(); });
     Shell.closeStart = closeMenu;
   }
 
@@ -399,6 +404,9 @@
     add(h('button', { class: 'mb-btn', text: 'Help' }), () => [
       { label: 'ulyOS on GitHub', icon: 'external', action: () => window.open('https://github.com/ulyweb/ulyOS', '_blank', 'noopener,noreferrer') },
       { label: 'Security settings…', icon: 'shield', action: () => API().openSettings('security') },
+      ...(ulyOS.config.OFFLINE ? [] : [{ label: 'Download offline version…', icon: 'download', action: () => ulyOS.offline.download() }]),
+      ...(ulyOS.admin && ulyOS.admin.enabled() ? [{ label: 'Contact Admin…', icon: 'mailSend', action: () => ulyOS.admin.contact() }] : []),
+      { separator: true },
       { label: 'About ulyOS', icon: 'info', action: about },
     ]);
     setApp();

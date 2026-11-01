@@ -46,3 +46,10 @@ Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
 - Settings footer: autosave status, **Save now**, **Export settings** and **Import settings** (appearance, dock / menu bar and desktop icon layout as a JSON file, to copy a setup to another device or profile; imports are validated).
 - Password generator everywhere a secret is chosen (new profile, change password, file encryption, backup export): length, character sets, live entropy and estimated brute-force time.
 - Defaults: floating dock, clock with seconds, colorful animated icons.
+
+## Widgets, clock, admin contact and offline version
+- **Widgets** (right-click the desktop → Add widget, or Settings → Widgets): Clock, Calendar, Notes, System monitor, Crypto prices, Timer. Drag to move, three sizes, saved in your encrypted profile. Crypto prices use the public CoinGecko API only while that widget exists.
+- **Clock**: 12-hour (AM/PM) or 24-hour (military), with or without seconds — Settings → Desktop.
+- **Contact Admin** (online build): in the profile screen footer, start menu, Help menu and Settings → System. Uses the same Google Apps Script relay as ulyweb/key. Only what you type is sent, and only after you press Send.
+- **Admin notification** (online build): the site admin is emailed when a profile is created — profile name, protected yes/no, the optional email you typed, time, site, language and time zone. Never passwords, PINs, keys, files or app data. This is disclosed on the profile screen and is disabled on localhost, file:// and in the offline build.
+- **Offline version**: Settings → System, the Help menu, the start menu or the desktop right-click menu builds `ulyOS-offline-YYYYMMDD.zip` in the browser: the whole OS, start scripts for macOS/Linux/Windows, and a config with `OFFLINE: true` (no Contact Admin, no notification, nothing sent anywhere).

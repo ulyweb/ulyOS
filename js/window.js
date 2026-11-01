@@ -146,6 +146,10 @@
     sliders: '<path d="M5 4v16M12 4v16M19 4v16"/><circle cx="5" cy="9" r="2"/><circle cx="12" cy="15" r="2"/><circle cx="19" cy="8" r="2"/>',
     lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
     minus: '<path d="M5 12h14"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    timer: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>',
+    mailSend: '<path d="M3 11l18-8-8 18-2-8z"/>',
     trending: '<path d="M3 17l6-6 4 4 8-8M15 7h6v6"/>',
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
     qr: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h3M20 17v4M17 20v.01"/>',
@@ -156,7 +160,12 @@
     '<svg class="ico" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
     'stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || ICONS.file) + '</svg>';
 
-  ulyOS.util = { h, icon, ICONS, clamp, pad2, fmtTime, fmtBytes, fmtDuration, debounce, escapeHtml, store, dur, animOn, cssNum };
+  /** Clock text: h24 → "23:07:41", otherwise "11:07:41 PM". */
+  const fmtClock = (d, { seconds = false, h24 = true } = {}) => {
+    const hh = d.getHours(), mm = pad2(d.getMinutes()), ss = seconds ? ':' + pad2(d.getSeconds()) : '';
+    return h24 ? pad2(hh) + ':' + mm + ss : (hh % 12 || 12) + ':' + mm + ss + ' ' + (hh < 12 ? 'AM' : 'PM');
+  };
+  ulyOS.util = { h, icon, ICONS, clamp, pad2, fmtTime, fmtClock, fmtBytes, fmtDuration, debounce, escapeHtml, store, dur, animOn, cssNum };
 
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -854,6 +863,8 @@
           const v = typeof o === 'object' ? o.value : o;
           return h('option', { value: v, text: typeof o === 'object' ? o.label : o, selected: v === f.value });
         }));
+      } else if (f.type === 'textarea') {
+        input = h('textarea', { class: 'input', rows: f.rows || 5, value: f.value ?? '', placeholder: f.placeholder || '', spellcheck: true, style: { resize: 'vertical', minHeight: '90px' } });
       } else {
         input = h('input', { class: 'input', type: f.type || 'text', value: f.value ?? '', placeholder: f.placeholder || '', spellcheck: false, autocomplete: 'off' });
       }

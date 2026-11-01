@@ -64,6 +64,8 @@
     <div id="sm-list" class="sm-list"></div>
     <div class="sm-foot">
       <button id="sm-lock" class="btn sm">Lock</button>
+      <button id="sm-contact" class="btn sm" hidden>✉ Contact Admin</button>
+      <button id="sm-offline" class="btn sm" hidden>⬇ Offline version</button>
       <button id="sm-fullscreen" class="btn sm">Fullscreen</button>
       <button id="sm-restart" class="btn sm danger">Restart</button>
     </div>
@@ -74,11 +76,15 @@
 
   <noscript><p style="color:#fff;padding:2rem">ulyOS needs JavaScript.</p></noscript>
 
+  <script src="js/config.js"></script>
   <script src="js/window.js"></script>
   <script src="js/security.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/offline.js"></script>
   <script src="js/telemetry.js"></script>
   <script src="js/filesystem.js"></script>
   <script src="js/desktop.js"></script>
   <script src="js/shell.js"></script>
+  <script src="js/widgets.js"></script>
 </body>
 </html>

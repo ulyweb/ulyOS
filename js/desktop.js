@@ -17,7 +17,7 @@
   const DEFAULT_SETTINGS = {
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
-    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true,
+    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '24', widgetsVisible: true,
     cursorStyle: 'classic', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // taskbar / dock / menu bar (see js/shell.js)
     taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 52, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
@@ -89,6 +89,7 @@
     root.style.setProperty('--cell-w', sz.cw + 'px');
     root.style.setProperty('--cell-h', sz.ch + 'px');
     root.style.setProperty('--tile', sz.tile + 'px');
+    ulyOS.Widgets?.applyVisibility?.();
     ulyOS.Shell?.layout?.();   // first: it changes the usable area the icon grid is measured against
     if (Desktop.ready) Desktop.layout();
     ulyOS.Shell?.tickClock?.();
@@ -353,7 +354,7 @@
 
   Desktop.render = function (animateIn) {
     const host = $('#desktop');
-    host.replaceChildren();
+    host.querySelectorAll('.desk-icon').forEach((n) => n.remove());   // keep the #widgets layer
     Desktop.els.clear();
     metrics();
     Desktop.icons.forEach((ic, i) => {
@@ -534,6 +535,8 @@
         action: () => { Settings.set('wallpaper', id); applyWallpaper(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
       }))).concat([{ separator: true }, { label: 'More in Settings…', icon: 'settings', action: () => SettingsApp.open('appearance') }]) },
       { label: 'Customize dock & menu bar…', icon: 'desktop', action: () => SettingsApp.open('shell') },
+      ...(ulyOS.Widgets ? ulyOS.Widgets.menuItems() : []),
+      ...(ulyOS.config.OFFLINE ? [] : [{ label: 'Download offline version…', icon: 'download', action: () => ulyOS.offline.download() }]),
       { label: 'Icon size', icon: 'grid', submenu: ['small', 'medium', 'large'].map((s) => ({
         label: (settings.iconSize === s ? '✓ ' : '    ') + s[0].toUpperCase() + s.slice(1),
         action: () => Settings.set('iconSize', s),
@@ -772,6 +775,7 @@
     if ('iconSize' in out && !oneOf(out.iconSize, ['small', 'medium', 'large'])) delete out.iconSize;
     if ('taskbarMode' in out && !oneOf(out.taskbarMode, ['bar', 'dock'])) delete out.taskbarMode;
     if ('taskbarPos' in out && !oneOf(out.taskbarPos, ['bottom', 'top', 'left', 'right'])) delete out.taskbarPos;
+    if ('clockFormat' in out && !oneOf(out.clockFormat, ['12', '24'])) delete out.clockFormat;
     if ('menubarStyle' in out && !oneOf(out.menubarStyle, ['glass', 'solid'])) delete out.menubarStyle;
     // a custom wallpaper only travels if it is a plain web URL (uploaded images live in this browser's sandbox)
     const wpc = normalizeUrl(out.wallpaperCustom || '');
@@ -808,6 +812,7 @@
       format: 'ulyOS-settings', v: 1, exported: new Date().toISOString(), profile: prof ? prof.name : '',
       settings: { ...settings, wallpaperCustom: String(settings.wallpaperCustom || '').startsWith('opfs:') ? '' : settings.wallpaperCustom },
       icons: Desktop.icons.map((i) => ({ id: i.id, kind: i.kind, name: i.name, url: i.url, mode: i.mode, col: i.col, row: i.row })),
+      widgets: ulyOS.Widgets.exportList(),   // positions / sizes only — note text is private and never exported
     };
     if (String(settings.wallpaperCustom || '').startsWith('opfs:') && settings.wallpaper === 'custom') data.settings.wallpaper = 'void';
     const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'ulyOS-settings-' + (prof ? prof.name.replace(/[^\w.-]+/g, '_') : 'profile') + '-' + new Date().toISOString().slice(0, 10) + '.json' });
@@ -829,6 +834,7 @@
     eff = {};
     Settings.patch(clean);
     if (icons) { Desktop.icons = icons; saveIcons(); Desktop.render(); }
+    if (Array.isArray(obj.widgets)) ulyOS.Widgets.importList(obj.widgets);
     await applyWallpaper();
     ulyOS.audit('Settings imported (' + Object.keys(clean).length + ' options' + (icons ? ', ' + icons.length + ' icons' : '') + ')', 'ok');
     ui.toast('Settings imported', { type: 'ok' });
@@ -930,7 +936,9 @@
         row('Auto-arrange', 'Pack icons into the grid from the top-left', h('button', { class: 'btn sm', text: 'Arrange now', onclick: autoArrange })),
         row('Restore stock icons', 'Bring back deleted default icons', h('button', { class: 'btn sm', text: 'Restore', onclick: () => { missingDefaults().length ? restoreDefaults() : ui.toast('All stock icons are already on the desktop'); } })),
         h('h3', { text: 'Clock' }),
-        row('Show seconds in clock', null, sw('clockSeconds'))),
+        row('Show seconds in clock', null, sw('clockSeconds')),
+        row('Time format', 'Applies to the taskbar / menu bar clock and the Clock widget', choose('clockFormat', [['24', '24-hour (military)'], ['12', '12-hour (AM/PM)']]))),
+      widgets: ulyOS.Widgets.settingsSection({ row, sw }),
       shell: ulyOS.Shell.settingsSection({ row, sw, range, choose }),
       security: securitySection(),
       system: h('div', {},
@@ -942,6 +950,8 @@
           if (await ui.confirm({ title: 'Reset settings?', message: 'Appearance and behaviour return to defaults. Files are not touched.', okText: 'Reset' })) { Settings.reset(); ulyOS.audit('Settings reset to defaults', 'warn'); show('appearance'); paintTiles(); paintSw(); }
         } })),
         row('Restart ulyOS', 'Close all windows and replay the boot sequence', h('button', { class: 'btn sm', text: 'Restart', onclick: restart })),
+        ulyOS.config.OFFLINE ? null : row('Offline version', 'Download a .zip you can run without the internet (no admin contact, nothing is sent anywhere)', h('button', { class: 'btn sm', html: icon('download', 14) + ' Download .zip', onclick: () => ulyOS.offline.download() })),
+        ulyOS.admin.enabled() ? row('Contact Admin', 'Send a message to the person who runs this site', h('button', { class: 'btn sm', html: icon('mailSend', 14) + ' Write message', onclick: () => ulyOS.admin.contact() })) : null,
         h('h3', { text: 'About' }),
         h('div', { class: 'about mono' },
           h('div', { text: 'ulyOS 1.0 · vanilla HTML/CSS/JS' }),
@@ -949,7 +959,7 @@
           h('div', { text: 'OPFS: ' + (ulyOS.FS.roots.sandbox.handle ? 'ready' : 'unavailable') }),
           h('div', { text: 'Directory picker: ' + (window.showDirectoryPicker ? 'supported' : 'unsupported') }))),
     };
-    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['shell', 'grid', 'Dock & Menu bar'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System']];
+    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['widgets', 'clock', 'Widgets'], ['shell', 'grid', 'Dock & Menu bar'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System']];
     const navBtns = {};
     const content = h('div', { class: 'set-content' });
     function show(id) {
@@ -986,6 +996,7 @@
     if (settings.shuffleOnLogin) surprise(false);
     applySettings();
     Desktop.init();
+    ulyOS.Widgets.init();
     ulyOS.Shell.init();
     boot(true);
   }

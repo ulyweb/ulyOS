@@ -18,7 +18,7 @@
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
     cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '12', widgetsVisible: true,
-    cursorStyle: 'neon', cursorSize: 100, animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
+    cursorStyle: 'neon', cursorSize: 100, cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // Telemetry FX (Settings → Effects)
     fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, depth: 50, sfx: true, sfxVolume: 35,
     // memory hygiene (Settings → Security)
@@ -45,11 +45,22 @@
     ['void', 'Void'], ['aurora', 'Aurora'], ['grid', 'Grid'], ['ocean', 'Deep Ocean'], ['ember', 'Ember'], ['mono', 'Graphite'],
     ['sunset', 'Sunset'], ['forest', 'Forest'], ['nebula', 'Nebula'], ['midnight', 'Midnight'], ['rose', 'Rose'], ['carbon', 'Carbon'], ['lagoon', 'Lagoon'], ['dusk', 'Dusk'],
   ];
-  const CURSOR_STYLES = [['classic', 'Classic arrow'], ['dot', 'Dot'], ['cross', 'Crosshair'], ['neon', 'Neon arrow'], ['ring', 'Ring'], ['system', 'System default']];
+  const CURSOR_STYLES = [['classic', 'Classic arrow'], ['dot', 'Dot'], ['cross', 'Crosshair'], ['neon', 'Neon arrow'], ['ring', 'Ring'], ['solid', 'Solid arrow'], ['target', 'Target'], ['system', 'System default']];
+  const FONTS = [['system', 'Inter / System UI'], ['rounded', 'Rounded'], ['humanist', 'Humanist (Segoe / Gill)'], ['serif', 'Serif (Georgia)'], ['mono', 'Monospace'], ['slab', 'Typewriter / Slab'], ['casual', 'Casual (Comic)'], ['condensed', 'Condensed']];
+  const FONT_STACKS = {
+    system: 'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+    rounded: 'ui-rounded, "SF Pro Rounded", "Hiragino Maru Gothic ProN", Quicksand, Nunito, "Segoe UI", system-ui, sans-serif',
+    humanist: '"Gill Sans", "Gill Sans MT", Calibri, "Segoe UI", Candara, Optima, sans-serif',
+    serif: 'Georgia, "Iowan Old Style", "Palatino Linotype", Palatino, Cambria, "Times New Roman", serif',
+    mono: 'ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "Liberation Mono", monospace',
+    slab: '"Rockwell", "Courier New", Courier, "American Typewriter", serif',
+    casual: '"Comic Sans MS", "Comic Neue", "Chalkboard SE", "Marker Felt", cursive',
+    condensed: '"Arial Narrow", "Roboto Condensed", "Helvetica Neue Condensed", "Segoe UI Semibold", sans-serif',
+  };
   const ANIM_STYLES = [['scale', 'Scale'], ['slide', 'Slide up'], ['fade', 'Fade'], ['zoom', 'Zoom'], ['bounce', 'Bounce'], ['blur', 'Blur in']];
   const ICON_STYLES = [['vivid', 'Colorful & animated'], ['glass', 'Glass'], ['flat', 'Flat'], ['outline', 'Outline'], ['circle', 'Circle'], ['neon', 'Neon'], ['gradient', 'Gradient']];
   const LANDS = ulyOS.landscapes ? ulyOS.landscapes.list : [];
-  const POOLS = { wallpaper: [...WALLPAPERS.map((w) => w[0]), ...LANDS.map((l) => 'land:' + l[0])], cursorStyle: ['classic', 'dot', 'cross', 'neon', 'ring'], iconStyle: ICON_STYLES.map((i) => i[0]) };
+  const POOLS = { wallpaper: [...WALLPAPERS.map((w) => w[0]), ...LANDS.map((l) => 'land:' + l[0])], cursorStyle: ['classic', 'dot', 'cross', 'neon', 'ring', 'solid', 'target'], iconStyle: ICON_STYLES.map((i) => i[0]) };
   const rnd = (a) => a[Math.floor(Math.random() * a.length)];
   const wpName = (id) => (id.startsWith('land:') ? (LANDS.find((l) => l[0] === id.slice(5)) || [0, id])[1] : (WALLPAPERS.find((w) => w[0] === id) || [0, id])[1]);
   /* "random" settings resolve to one concrete pick that stays stable for the whole session */
@@ -86,6 +97,11 @@
     root.style.setProperty('--blur', s.blur + 'px');
     root.style.setProperty('--glass-alpha', s.glassAlpha);
     root.style.setProperty('--speed', s.animSpeed);
+    root.style.setProperty('--font', FONT_STACKS[s.fontFamily] || FONT_STACKS.system);
+    root.style.setProperty('--fscale', (clamp(+s.fontSize || 13, 10, 22) / 13).toFixed(5));
+    root.style.setProperty('--fw', String([300, 400, 500, 600, 700].includes(+s.fontWeight) ? +s.fontWeight : 400));
+    root.style.setProperty('--fstyle', s.fontStyle === 'italic' ? 'italic' : 'normal');
+    document.body.dataset.widgets = s.widgetStyle === 'glass' ? 'glass' : 'vivid';
     document.body.classList.toggle('no-anim', !s.animations);
     document.body.classList.toggle('no-blur', s.blur === 0);
     root.style.setProperty('--fx-aurora', (s.fxAurora / 100).toFixed(2));
@@ -140,7 +156,9 @@
       const style = val('cursorStyle') || 'classic';
       const on = settings.cursor && style !== 'system';
       document.body.classList.toggle('no-cursor', !on);
-      const ac = settings.accent;
+      const ac = /^#[0-9a-f]{6}$/i.test(settings.cursorColor) ? settings.cursorColor : settings.accent;
+      const fc = /^#[0-9a-f]{6}$/i.test(settings.cursorColor) ? settings.cursorColor : '#fff';
+      root.style.setProperty('--ring-c', ac);
       const scale = clamp((+settings.cursorSize || 100) / 100, 0.5, 3);
       const px = Math.min(96, Math.round(28 * scale)), kk = px / 28;
       root.style.setProperty('--ring-scale', scale.toFixed(2));
@@ -148,14 +166,18 @@
         '<svg xmlns="http://www.w3.org/2000/svg" width="' + px + '" height="' + px + '" viewBox="0 0 28 28">' + body + '</svg>') + '") ' + Math.round(hx * kk) + ' ' + Math.round(hy * kk) + ', ' + fb;
       const ARROW = 'M6 4l15 8.2-6.6 1.9-2.9 6.4z';
       const SETS = {
-        classic: [svg('<path d="' + ARROW + '" fill="#fff" stroke="#000" stroke-opacity=".85" stroke-width="1.3" stroke-linejoin="round"/>', 6, 4, 'default'),
-          svg('<circle cx="14" cy="14" r="7" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="1.4"/><circle cx="14" cy="14" r="2" fill="#fff"/>', 14, 14, 'pointer')],
-        dot: [svg('<circle cx="14" cy="14" r="4.2" fill="#fff" stroke="#000" stroke-opacity=".75" stroke-width="1.3"/>', 14, 14, 'default'),
+        classic: [svg('<path d="' + ARROW + '" fill="' + fc + '" stroke="#000" stroke-opacity=".85" stroke-width="1.3" stroke-linejoin="round"/>', 6, 4, 'default'),
+          svg('<circle cx="14" cy="14" r="7" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="1.4"/><circle cx="14" cy="14" r="2" fill="' + fc + '"/>', 14, 14, 'pointer')],
+        dot: [svg('<circle cx="14" cy="14" r="4.2" fill="' + fc + '" stroke="#000" stroke-opacity=".75" stroke-width="1.3"/>', 14, 14, 'default'),
           svg('<circle cx="14" cy="14" r="8" fill="none" stroke="' + ac + '" stroke-width="1.8"/><circle cx="14" cy="14" r="2.6" fill="' + ac + '"/>', 14, 14, 'pointer')],
         cross: [svg('<path d="M14 3v22M3 14h22" stroke="#000" stroke-opacity=".7" stroke-width="3.2"/><path d="M14 3v22M3 14h22" stroke="#fff" stroke-width="1.3"/>', 14, 14, 'crosshair'),
           svg('<circle cx="14" cy="14" r="6" fill="none" stroke="' + ac + '" stroke-width="1.6"/><path d="M14 2v6M14 20v6M2 14h6M20 14h6" stroke="' + ac + '" stroke-width="1.6"/>', 14, 14, 'pointer')],
         neon: [svg('<path d="' + ARROW + '" fill="rgba(0,0,0,.55)" stroke="' + ac + '" stroke-opacity=".35" stroke-width="4.5" stroke-linejoin="round"/><path d="' + ARROW + '" fill="rgba(0,0,0,.4)" stroke="' + ac + '" stroke-width="1.6" stroke-linejoin="round"/>', 6, 4, 'default'),
           svg('<circle cx="14" cy="14" r="8" fill="' + ac + '" fill-opacity=".18" stroke="' + ac + '" stroke-opacity=".4" stroke-width="4"/><circle cx="14" cy="14" r="8" fill="none" stroke="' + ac + '" stroke-width="1.6"/>', 14, 14, 'pointer')],
+        solid: [svg('<path d="' + ARROW + '" fill="' + ac + '" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>', 6, 4, 'default'),
+          svg('<path d="' + ARROW + '" fill="' + ac + '" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/><circle cx="21" cy="21" r="4" fill="#fff" stroke="' + ac + '" stroke-width="1.6"/>', 6, 4, 'pointer')],
+        target: [svg('<circle cx="14" cy="14" r="8.5" fill="none" stroke="#000" stroke-opacity=".6" stroke-width="3.4"/><circle cx="14" cy="14" r="8.5" fill="none" stroke="' + ac + '" stroke-width="1.8"/><path d="M14 2.5v6M14 19.5v6M2.5 14h6M19.5 14h6" stroke="' + ac + '" stroke-width="1.8"/><circle cx="14" cy="14" r="1.6" fill="' + ac + '"/>', 14, 14, 'default'),
+          svg('<circle cx="14" cy="14" r="8.5" fill="' + ac + '" fill-opacity=".3" stroke="' + ac + '" stroke-width="2"/><circle cx="14" cy="14" r="2.4" fill="#fff"/>', 14, 14, 'pointer')],
         ring: [svg('<circle cx="14" cy="14" r="7" fill="none" stroke="#000" stroke-opacity=".6" stroke-width="3.2"/><circle cx="14" cy="14" r="7" fill="none" stroke="#fff" stroke-width="1.5"/>', 14, 14, 'default'),
           svg('<circle cx="14" cy="14" r="7" fill="' + ac + '" stroke="#fff" stroke-width="1.5"/>', 14, 14, 'pointer')],
       };
@@ -272,6 +294,7 @@
     files: { name: 'Files', icon: 'folder', open: () => ulyOS.FS.open() },
     taskmgr: { name: 'Task Manager', icon: 'activity', open: () => ulyOS.Telemetry.open() },
     settings: { name: 'Settings', icon: 'settings', open: () => SettingsApp.open() },
+    speak: { name: 'Speak', icon: 'volume', open: () => ulyOS.Speech.open() },
   };
   const DEFAULT_ICONS = [
     { id: 'files', kind: 'sys', sys: 'files', name: 'Files' },
@@ -285,6 +308,7 @@
     { id: 'cryptocompass', kind: 'local', name: 'Crypto Compass', file: 'apps/cryptocompass.html', glyph: 'compass', mem: 40, w: 1100, h: 760, tint: '#fbbf24' },
     { id: 'taskmgr', kind: 'sys', sys: 'taskmgr', name: 'Task Manager' },
     { id: 'settings', kind: 'sys', sys: 'settings', name: 'Settings' },
+    { id: 'speak', kind: 'sys', sys: 'speak', name: 'Speak' },
   ];
 
   /** Icon markup for an icon record (used by desktop tiles, taskbar, window chrome). */
@@ -598,6 +622,11 @@
       store.set('ulyos.migr.dropTrustVault', true);
       if (saved) saveIcons();
     }
+    if (!store.get('ulyos.migr.addSpeak', false)) {   // one-time: the new Speak app appears on existing desktops
+      if (!Desktop.icons.some((i) => i.id === 'speak')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'speak') });
+      store.set('ulyos.migr.addSpeak', true);
+      if (saved) saveIcons();
+    }
     if (!store.get('ulyos.migr.dropPhotopeaSpotify', false)) {   // one-time: these are no longer stock icons
       Desktop.icons = Desktop.icons.filter((i) => !['photopea', 'spotify'].includes(i.id));
       store.set('ulyos.migr.dropPhotopeaSpotify', true);
@@ -747,6 +776,14 @@
             try { await sec.changeSecret(v.old, v.pw); ui.toast('Password changed', { type: 'ok' }); bus.emit('profile:change'); paint(); }
             catch (err) { ui.toast(err.message, { type: 'err' }); }
           } })),
+        h('details', { class: 'howto' }, h('summary', { text: 'How passkeys and fingerprint unlock work — and how to use them' }),
+          h('p', { html: '<b>The idea:</b> your device (Touch ID, Windows Hello, an Android phone or iPhone, or a USB security key) keeps a secret that never leaves it. When you unlock, ulyOS asks the device for a code derived from that secret and uses it to open your vault. Because the code is long and random and stays inside the device, nobody can guess it from a copy of your data — a PIN can be guessed in minutes, a passkey cannot.' }),
+          h('ol', {}, [
+            h('li', { html: 'Press <b>Add passkey…</b>, name it (for example “MacBook fingerprint”) and type your password once to prove it is you.' }),
+            h('li', { html: 'Your browser shows its own prompt — touch the sensor, look at the camera, enter the device PIN or tap the key. Approve it.' }),
+            h('li', { html: 'Next time, on the profile screen or the lock screen press <b>Use passkey / fingerprint</b> instead of typing the password.' }),
+          ]),
+          h('p', { html: '<b>Good to know:</b> your password still works and is your recovery — keep it. A passkey belongs to one site address, so the online site and the offline copy each need their own. Passkeys saved to iCloud Keychain or Google Password Manager appear on your other devices automatically; otherwise add one per device. If you see “did not return a key”, that authenticator lacks the PRF feature — try another device or browser. Remove a lost device’s passkey in the list below.' })),
         row('Passkey / fingerprint', sec.passkeySupported() ? 'Unlock with Touch ID, Windows Hello, a phone or a security key. The key comes from the authenticator, not from anything typed, so it cannot be guessed offline the way a PIN can. Your password stays as the fallback.' : 'This browser cannot create passkeys here (needs HTTPS or localhost and WebAuthn).',
           h('button', { class: 'btn sm', text: 'Add passkey…', disabled: !sec.passkeySupported(), onclick: async () => {
             const v = await ui.form({ title: 'Add a passkey', message: 'Confirm your password, then your device will ask for your fingerprint, face, PIN or security key.',
@@ -809,6 +846,12 @@
     const clampKey = (k, lo, hi) => { if (k in out) out[k] = clamp(out[k], lo, hi); };
     clampKey('fxAurora', 0, 100); clampKey('fxTilt', 0, 10); clampKey('fxGlow', 0, 100); clampKey('iconScale', 50, 160); clampKey('depth', 0, 100); clampKey('sfxVolume', 0, 100); clampKey('cursorSize', 50, 300); clampKey('clipClear', 0, 600); clampKey('purgeIdle', 0, 3600);
     clampKey('animSpeed', 0.25, 3); clampKey('blur', 0, 60); clampKey('glassAlpha', 0.3, 1); clampKey('taskbarSize', 36, 84);
+    clampKey('fontSize', 10, 22);
+    if ('fontFamily' in out && !FONTS.some((f) => f[0] === out.fontFamily)) delete out.fontFamily;
+    if ('fontWeight' in out && ![300, 400, 500, 600, 700].includes(out.fontWeight)) delete out.fontWeight;
+    if ('fontStyle' in out && !['normal', 'italic'].includes(out.fontStyle)) delete out.fontStyle;
+    if ('widgetStyle' in out && !['vivid', 'glass'].includes(out.widgetStyle)) delete out.widgetStyle;
+    if ('cursorColor' in out && out.cursorColor !== '' && !HEX.test(out.cursorColor)) delete out.cursorColor;
     ['accent', 'wallpaperColor'].forEach((k) => { if (k in out && !HEX.test(out[k])) delete out[k]; });
     if ('wallpaper' in out && !oneOf(out.wallpaper, [...POOLS.wallpaper, 'solid', 'custom', 'random'])) delete out.wallpaper;
     if ('cursorStyle' in out && !oneOf(out.cursorStyle, [...CURSOR_STYLES.map((c) => c[0]), 'random'])) delete out.cursorStyle;
@@ -864,8 +907,8 @@
   }
   async function importSettings(file) {
     let obj;
-    try { obj = JSON.parse(await file.text()); } catch { ui.toast('That is not a valid settings file', { type: 'err' }); return; }
-    if (!obj || obj.format !== 'ulyOS-settings' || typeof obj.settings !== 'object' || !obj.settings) { ui.toast('Not a ulyOS settings export', { type: 'err' }); return; }
+    try { obj = JSON.parse(await file.text()); } catch { ui.toast('That file is not valid JSON — import the .json file exported from Settings (not a .ulyprofile backup or a .zip)', { type: 'err', timeout: 7000 }); return; }
+    if (!obj || obj.format !== 'ulyOS-settings' || typeof obj.settings !== 'object' || !obj.settings) { ui.toast(obj && obj.format === 'ulyOS-profile' ? 'That is an encrypted profile backup. Restore it from the profile screen (Add profile → Import encrypted backup)' : 'This file is not a ulyOS settings export (it should contain format “ulyOS-settings”)', { type: 'err', timeout: 7000 }); return; }
     const clean = sanitizeSettings(obj.settings);
     const icons = sanitizeIcons(obj.icons);
     const ok = await ui.confirm({
@@ -895,7 +938,7 @@
       ['Folder picker', window.showDirectoryPicker ? 'supported' : 'not supported'],
       ['Display mode', standalone ? 'installed app' : 'browser tab'],
       ['Viewport', window.innerWidth + '×' + window.innerHeight + ' @' + (window.devicePixelRatio || 1) + 'x · ' + (ulyOS.WM.compact() ? 'phone layout' : 'desktop layout') + ' · ' + (ulyOS.util.isTouch() ? 'touch' : 'mouse')],
-      ['Profile vault', ulyOS.security.isProtected() ? 'encrypted (AES-256-GCM)' : 'not encrypted'],
+      ['Profile vault', 'encrypted (AES-256-GCM)'],
       ['Browser', navigator.userAgent.replace(/\s+/g, ' ').slice(0, 110)],
     ];
     const table = h('div', { class: 'about-diag mono' });
@@ -988,8 +1031,20 @@
       paint(); return w;
     };
 
-    const storageEl = h('span', { class: 'mono', text: '…' });
-    navigator.storage?.estimate?.().then((e) => { storageEl.textContent = fmtBytes(e.usage) + ' of ' + fmtBytes(e.quota); }).catch(() => { storageEl.textContent = 'n/a'; });
+    const storageEl = h('div', { class: 'storage-box' });
+    const paintStorage = async () => {
+      let e = null, persisted = null;
+      try { e = await navigator.storage.estimate(); persisted = await navigator.storage.persisted(); } catch { /* unsupported */ }
+      if (!e) { storageEl.replaceChildren(h('span', { class: 'mono', text: 'n/a' })); return; }
+      const pct = Math.max(0.5, Math.min(100, (e.usage / e.quota) * 100));
+      storageEl.replaceChildren(
+        h('span', { class: 'mono', text: fmtBytes(e.usage) + ' used of ' + fmtBytes(e.quota) + ' (' + pct.toFixed(pct < 1 ? 2 : 1) + '%)' }),
+        h('div', { class: 'stor-bar' }, h('i', { style: { width: pct + '%' } })),
+        h('div', { class: 'btn-row' },
+          h('span', { class: 'set-desc', text: persisted ? '✓ The browser has promised to keep your data' : 'The browser may clear this data if the disk fills up' }),
+          persisted ? null : h('button', { class: 'btn sm', text: 'Keep my data', title: 'Ask the browser for persistent storage', onclick: async () => { const ok = await navigator.storage.persist?.(); ui.toast(ok ? 'Persistent storage granted' : 'The browser declined (it decides by how much you use the site; installing ulyOS as an app helps)', { type: ok ? 'ok' : 'info', timeout: 5000 }); paintStorage(); } })));
+    };
+    paintStorage();
 
     const FX_DEFAULTS = { fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, blur: 24, glassAlpha: 0.72, depth: 50, sfx: true, sfxVolume: 35, cursorSize: 100 };
     let currentTab = startTab;
@@ -1015,7 +1070,12 @@
       h('h3', { text: 'Pointer' }),
       row('Custom cursor', 'SVG cursor with a trailing ring (not shown inside embedded apps)', sw('cursor')),
       row('Cursor style', '“Random” picks one each sign-in; the accent color tints Neon, Dot and Crosshair', choose('cursorStyle', CURSOR_STYLES, 'Random each sign-in')),
-      row('Pointer size', 'Scales the cursor and its trailing ring', range('cursorSize', 60, 250, 10, (v) => v + '%')));
+      row('Pointer size', 'Scales the cursor and its trailing ring', range('cursorSize', 60, 250, 10, (v) => v + '%')),
+      row('Pointer color', 'Tints the cursor and its ring. “Follow accent” uses your accent color', (() => {
+        const ci = h('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(settings.cursorColor) ? settings.cursorColor : settings.accent, oninput: (e) => Settings.set('cursorColor', e.target.value) });
+        return h('div', { class: 'btn-row' }, ci, h('button', { class: 'btn sm', text: 'Follow accent', onclick: () => { Settings.set('cursorColor', ''); ci.value = settings.accent; } }),
+          h('button', { class: 'btn sm', text: '🎲', title: 'Random color', onclick: () => { const c = hslHex(Math.floor(Math.random() * 360), 85, 62); Settings.set('cursorColor', c); ci.value = c; } }));
+      })()));
     const rebuildEffects = () => { sections.effects = buildEffects(); if (currentTab === 'effects') show('effects'); };
 
     const sections = {
@@ -1034,7 +1094,17 @@
           Settings.set('wallpaperCustom', u); Settings.set('wallpaper', 'custom'); applyWallpaper(); paintTiles();
           ulyOS.audit('Wallpaper set from ' + hostName(u), 'info');
         } }))),
-        h('h3', { text: 'Accent color' }), swatches, fileIn),
+        h('h3', { text: 'Accent color' }), swatches,
+        h('h3', { text: 'Text' }),
+        row('Font', 'Applies to the whole interface. These are fonts already on your device, so nothing is downloaded', choose('fontFamily', FONTS)),
+        row('Text size', 'Scales every label, menu and window (13 is the default)', range('fontSize', 10, 22, 1, (v) => v + ' px')),
+        row('Weight', null, h('select', { class: 'input sm', onchange: (e) => Settings.set('fontWeight', +e.target.value) }, [[300, 'Light'], [400, 'Regular'], [500, 'Medium'], [600, 'Semi-bold'], [700, 'Bold']].map(([v, l]) => h('option', { value: v, text: l, selected: +settings.fontWeight === v })))),
+        row('Style', null, choose('fontStyle', [['normal', 'Normal'], ['italic', 'Italic']])),
+        h('div', { class: 'set-desc', style: { padding: '8px 2px', fontSize: 'calc(15px * var(--fscale, 1))' }, text: 'The quick brown fox jumps over the lazy dog — 0123456789' }),
+        h('div', { class: 'set-tools' }, h('button', { class: 'btn', text: 'Reset text to defaults', onclick: () => { Settings.patch({ fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal' }); const w = WM.byApp('settings')[0]; if (w) WM.close(w, { force: true }); SettingsApp.open('appearance'); } })),
+        h('h3', { text: 'Widgets' }),
+        row('Widget style', 'Vivid gives every widget its own colors and glow; Glass keeps them neutral', choose('widgetStyle', [['vivid', 'Vivid (colorful)'], ['glass', 'Glass (neutral)']])),
+        fileIn),
       effects: buildEffects(),
       desktop: h('div', {},
         h('h3', { text: 'Icons' }),
@@ -1053,7 +1123,11 @@
       about: aboutSection(),
       system: h('div', {},
         h('h3', { text: 'Storage' }),
-        row('Sandbox usage', 'Origin-private storage for this site', storageEl),
+        row('Browser storage', 'What this site uses on your device, against the share the browser grants it', storageEl),
+        h('details', { class: 'howto' }, h('summary', { text: 'Why “10 GB”? Can I change it?' }),
+          h('p', { html: 'The limit is <b>not set by ulyOS</b>. It is the <b>quota your browser gives this website</b>, worked out from the free space on your disk (Chrome and Edge allow a site up to roughly 60% of the disk; Safari and Firefox use their own, usually smaller, rules). That is why the number differs between computers and changes as your disk fills or empties.' }),
+          h('p', { html: '<b>What counts:</b> your sandbox files (stored encrypted), the encrypted profile vault, and the offline cache of the ulyOS files themselves. Folders you open from your computer (“Open folder…”) are real files on your disk and are <b>not</b> counted.' }),
+          h('p', { html: '<b>Can it be changed?</b> A web page cannot raise or lower it. You can: free space on your disk (the quota grows), delete files in Files, or use “Keep my data” so the browser will not evict it. To start clean, your browser’s “Clear site data” for this site erases everything — export a backup first.' })),
         row('Open Task Manager', 'Live RAM / CPU simulation and the audit trail', h('button', { class: 'btn sm', text: 'Open', onclick: () => ulyOS.Telemetry.open() })),
         h('h3', { text: 'Maintenance' }),
         row('Reset settings', 'Restore appearance and behaviour defaults', h('button', { class: 'btn sm', text: 'Reset', onclick: async () => {

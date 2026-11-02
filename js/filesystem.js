@@ -629,7 +629,7 @@
         txt += ' · ' + s + ' selected' + (bytes ? ' (' + fmtBytes(bytes) + ')' : '');
       }
       if (FS.clipboard) txt += ' · ' + FS.clipboard.names.length + ' on clipboard (' + FS.clipboard.mode + ')';
-      this.status.replaceChildren(h('span', { text: txt }), h('span', { class: 'grow' }), h('span', { class: 'mono', text: this.rootId === 'sandbox' ? (this.usage || 'OPFS sandbox') : 'Local disk · read/write' }));
+      this.status.replaceChildren(h('span', { text: txt }), h('span', { class: 'grow' }), h('span', { class: 'mono', title: 'Used / the share of your disk the browser allows this site (not a ulyOS limit). Details: Settings → System → Browser storage', text: this.rootId === 'sandbox' ? (this.usage || 'OPFS sandbox') : 'Local disk · read/write' }));
     }
     paintCrumbs() {
       const kids = [];

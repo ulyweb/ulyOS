@@ -203,6 +203,18 @@
       const c = Sync.config();
       wrap.replaceChildren(
         h('p', { class: 'set-desc', text: 'Keep your settings, desktop layout, widgets and app data identical on all your devices. Everything is encrypted on this device with your sync passphrase before it leaves; the file or gist is unreadable without it. Sandbox files and the audit log are not synced.' }),
+        h('details', { class: 'howto' }, h('summary', { text: 'How sync works — step by step' }),
+          h('p', { html: 'Your data is locked on this device with the <b>sync passphrase</b>, and only the locked copy leaves. To sync, every device needs the <b>same passphrase</b> and a way to reach the same locked copy: a <b>file</b> you carry, or a <b>GitHub gist</b> that ulyOS reads and writes for you.' }),
+          h('p', { html: '<b>Option A — file (no accounts):</b> on device 1 set the passphrase → <i>Export</i>. Send the .ulysync file to device 2 (AirDrop, email, cloud drive). On device 2 set the <i>same</i> passphrase → <i>Import</i>. Repeat in the other direction whenever you want them to match.' }),
+          h('p', { html: '<b>Option B — automatic through GitHub:</b>' }),
+          h('ol', {}, [
+            h('li', { html: 'On every device set the same <b>sync passphrase</b> (step 1 below). It is not your profile password and never leaves the device unencrypted.' }),
+            h('li', { html: 'On github.com open <b>Settings → Developer settings → Personal access tokens</b> and create a token whose only permission is <b>Gists</b> (classic token: tick just “gist”). Copy it — it starts with <code>ghp_</code> or <code>github_pat_</code>.' }),
+            h('li', { html: 'Device 1: <b>Connect…</b>, paste the token, leave <i>Gist ID</i> empty, then <b>Sync now</b>. A secret gist is created; its ID appears next to “Connected” — press <b>Copy gist ID</b>.' }),
+            h('li', { html: 'Device 2: set the same passphrase, <b>Connect…</b>, paste the token and the Gist ID, choose <b>Merge</b>, and it pulls everything across.' }),
+            h('li', { html: 'Switch on <b>Sync automatically</b> on each device. Changes travel on sign-in and every 10 minutes; when new changes arrive ulyOS offers to reload.' }),
+          ]),
+          h('p', { html: '<b>Safe?</b> The gist only holds scrambled data; without your passphrase it is unreadable even to GitHub. The token is kept inside your encrypted vault. If a device is lost, delete the token on GitHub.' })),
         h('h3', { text: '1 · Sync passphrase' }),
         row(c.hasPass ? 'Passphrase is set' : 'Choose a passphrase', 'Use the same one on every device. It is separate from your profile password and is kept only inside your encrypted vault.',
           h('div', { class: 'btn-row' },
@@ -226,6 +238,7 @@
           ? row('Connected', 'Gist: ' + (c.gist || '(will be created on first sync)') + ' · last sync ' + fmt(c.last) + (c.lastResult ? ' (' + c.lastResult + ')' : ''),
             h('div', { class: 'btn-row' },
               h('button', { class: 'btn sm primary', html: icon('refresh', 14) + ' Sync now', disabled: !c.hasPass, onclick: async (e) => { e.target.disabled = true; try { await Sync.syncNow(); ui.toast('Sync complete', { type: 'ok' }); } catch (x) { fail(x); } paint(); } }),
+              c.gist ? h('button', { class: 'btn sm', text: 'Copy gist ID', onclick: async () => { try { await navigator.clipboard.writeText(c.gist); ui.toast('Gist ID copied — paste it on your other device', { type: 'ok' }); } catch { fail(new Error('Could not copy')); } } }) : null,
               h('button', { class: 'btn sm', text: 'Disconnect', onclick: () => { Sync.disconnect(); paint(); } })))
           : row('Connect', null, h('button', { class: 'btn sm primary', text: 'Connect…', onclick: async () => {
             const v = await ui.form({ title: 'Connect GitHub gist', message: 'First device: leave Gist ID empty. Other devices: paste the Gist ID shown on your first device.', fields: [{ name: 'tok', label: 'GitHub token (gist permission only)', type: 'password' }, { name: 'gist', label: 'Gist ID (optional)', value: '' }], okText: 'Connect', validate: (x) => (/^[\w-]{20,}$/.test((x.tok || '').trim()) ? ((x.gist || '').trim() && !/^[0-9a-f]{20,40}$/i.test(x.gist.trim()) ? 'That does not look like a gist ID' : null) : 'Paste a GitHub token') });

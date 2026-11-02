@@ -3,8 +3,16 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.9.0';
+ulyOS.version = '1.10.0';
 ulyOS.CHANGELOG = [
+  { v: '1.10.0', d: '2026-11-02', n: [
+    'Speak: a text-to-speech app (desktop icon, start menu) — type or paste text, or turn on "speak each word as I type"; choose voice, speed, pitch and volume. The Notes widget has a read-aloud button',
+    'Text: choose the interface font (8 families), size (10–22 px), weight and italic in Settings → Appearance',
+    'Pointer: new Solid arrow and Target styles, and a pointer color picker (or follow the accent)',
+    'Vivid widgets: every widget type has its own color palette, glow and gradient numbers; switch back to the neutral Glass look in Settings → Appearance',
+    'Settings → System → Browser storage explains where the "of 10 GB" figure comes from (the browser grants it, ulyOS cannot change it), shows a usage bar and a Keep my data button',
+    'Step-by-step guides for passkeys and sync inside Settings, a Copy gist ID button, and clearer messages when a settings file cannot be imported',
+  ] },
   { v: '1.9.0', d: '2026-11-02', n: [
     'A password is now mandatory for every profile. The "no password" option and PINs are gone; profiles from earlier versions (no password, a PIN, or a weak password) must choose a strong password the next time they sign in',
     'Passkey / fingerprint unlock (WebAuthn PRF): Touch ID, Windows Hello, a phone or a security key unlock the profile. The key comes from the authenticator, so it cannot be guessed offline the way a PIN can. The password stays as the fallback; add and remove passkeys in Settings → Security',

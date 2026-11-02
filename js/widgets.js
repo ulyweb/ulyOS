@@ -183,7 +183,7 @@
       },
     },
     notes: {
-      name: 'Notes', ico: 'text', size: 'm',
+      name: 'Notes', ico: 'text', size: 'm', speak: (inst) => inst.text,
       build(body, inst, ctx) {
         const ta = h('textarea', { class: 'w-notes w-nodrag', placeholder: 'Quick note… (saved in your profile)', spellcheck: false, value: inst.text || '', maxLength: 5000 });
         ta.addEventListener('input', debounce(() => ctx.save({ text: ta.value }), 400));
@@ -493,6 +493,7 @@
     const body = h('div', { class: 'w-body sz-' + inst.size });
     const ctx = { save: (patch) => { Object.assign(inst, patch); save(); } };
     const head = h('div', { class: 'w-head' }, h('span', { class: 'w-ico', html: icon(T.ico, 13) }), h('span', { class: 'w-title', text: T.name }),
+      T.speak && ulyOS.Speech && ulyOS.Speech.supported ? h('button', { class: 'w-speak', 'aria-label': 'Read aloud', title: 'Read aloud', html: icon('volume', 12), onclick: () => ulyOS.Speech.speak(T.speak(inst)) }) : null,
       T.config ? h('button', { class: 'w-x w-cfg', 'aria-label': 'Configure widget', title: 'Configure', html: icon('settings', 12), onclick: () => W.configure(inst.id) }) : null,
       h('button', { class: 'w-x', 'aria-label': 'Remove widget', title: 'Remove', html: icon('x', 12), onclick: () => W.remove(inst.id) }));
     const el = h('section', { class: 'wgt wgt-' + inst.type, dataset: { id: inst.id }, style: { width: w + 'px', height: hh + 'px', left: inst.x + 'px', top: inst.y + 'px' } }, head, body);

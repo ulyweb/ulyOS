@@ -719,46 +719,51 @@
     const row = (label, desc, ctl) => h('div', { class: 'set-row' }, h('div', {}, h('div', { class: 'set-label', text: label }), desc ? h('div', { class: 'set-desc', text: desc }) : null), ctl);
     const selS = (key, list) => h('select', { class: 'input sm', onchange: (e) => Settings.set(key, +e.target.value) }, list.map(([v, l]) => h('option', { value: v, text: l, selected: String(settings[key]) === String(v) })));
     const swS = (key) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!settings[key], onchange: (e) => Settings.set(key, e.target.checked) }), h('i'));
-    const credFieldFor = (pwc) => [{ name: 'type', label: 'Type', type: 'select', value: 'password', onchange: (v) => pwc.setMode(v), options: [{ value: 'password', label: 'Password (recommended)' }, { value: 'pin', label: 'PIN (digits only — weaker)' }] }];
     const secretFields = (pwc) => [{ name: 'pw', type: 'custom', node: pwc.el, get: pwc.value, focus: pwc.focus, dispose: pwc.dispose }, { name: 'pw2', type: 'custom', get: pwc.confirm }];
-    const validateNew = (v) => ulyOS.crypto.policy(v.pw, v.type) || (v.pw !== v.pw2 ? 'Entries do not match' : null);
+    const validateNew = (v) => ulyOS.crypto.policy(v.pw, 'password') || (v.pw !== v.pw2 ? 'Entries do not match' : null);
 
     function paint() {
-      const p = sec.profile(), info = sec.vaultInfo(), prot = p.protected;
+      const p = sec.profile(), info = sec.vaultInfo(), prot = true;
       const swatches = h('div', { class: 'swatches' }, sec.COLORS.map((c) => h('button', { class: 'swatch' + (p.color === c ? ' active' : ''), style: { background: c }, 'aria-label': c, onclick: () => { sec.setColor(c); paint(); } })));
       const nameIn = h('input', { class: 'input', value: p.name, maxLength: 24, style: { width: '170px' } });
-      const autoSel = h('select', { class: 'input sm', disabled: !prot, onchange: (e) => sec.setAutoLock(+e.target.value) },
+      const autoSel = h('select', { class: 'input sm', onchange: (e) => sec.setAutoLock(+e.target.value) },
         [[0, 'Never'], [1, '1 minute'], [2, '2 minutes'], [5, '5 minutes'], [10, '10 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']].map(([v, l]) => h('option', { value: v, text: l, selected: v === sec.getAutoLock() })));
 
       wrap.replaceChildren(
         h('div', { class: 'sec-status ' + (prot ? 'ok' : 'bad') },
           h('div', { class: 'sec-ico', html: icon(prot ? 'lock' : 'shield', 22) }),
           h('div', {}, h('div', { class: 'set-label', text: prot ? 'Vault encrypted at rest' : 'Vault is NOT encrypted' }),
-            h('div', { class: 'set-desc', text: prot ? 'AES-256-GCM · PBKDF2-SHA256 × ' + info.iterations.toLocaleString() + ' · ' + info.keys + ' entries · ' + (info.bytes / 1024).toFixed(1) + ' KB on disk'
+            h('div', { class: 'set-desc', text: prot ? 'AES-256-GCM · PBKDF2-SHA256 × ' + info.iterations.toLocaleString() + (info.passkeys ? ' · ' + info.passkeys + ' passkey' + (info.passkeys > 1 ? 's' : '') : '') + ' · ' + info.keys + ' entries · ' + (info.bytes / 1024).toFixed(1) + ' KB on disk'
               : 'Anyone using this browser (and any page on this site’s origin) can read this profile’s data. Set a password to encrypt it.' }))),
         h('h3', { text: 'Profile' }),
         row('Name', null, h('div', { class: 'inline-form', style: { width: 'auto' } }, nameIn, h('button', { class: 'btn sm', text: 'Rename', onclick: () => { sec.rename(nameIn.value); paint(); } }))),
         row('Color', null, swatches),
         h('h3', { text: 'Lock & password' }),
-        row(prot ? 'Change ' + (p.cred === 'pin' ? 'PIN' : 'password') : 'Set a password', prot ? 'Re-encrypts the vault with a fresh salt' : 'Encrypts this profile’s settings, app data and audit log',
-          h('div', { class: 'btn-row' },
-            h('button', { class: 'btn sm primary', text: prot ? 'Change…' : 'Set password…', onclick: async () => {
-              const pwc = ui.passwordInput();
-              const v = await ui.form({ title: prot ? 'Change password' : 'Set a password', message: prot ? null : 'There is no recovery. If you forget it, the encrypted data cannot be restored — export a backup below.',
-                fields: [...(prot ? [{ name: 'old', label: 'Current ' + (p.cred === 'pin' ? 'PIN' : 'password'), type: 'password' }] : []), ...credFieldFor(pwc), ...secretFields(pwc)],
-                okText: 'Save', validate: (x) => (prot && !x.old ? 'Enter your current secret' : validateNew(x)) });
-              if (!v) return;
-              try { await sec.changeSecret(prot ? v.old : null, v.pw, v.type); ui.toast('Vault re-encrypted', { type: 'ok' }); bus.emit('profile:change'); paint(); }
-              catch (err) { ui.toast(err.message, { type: 'err' }); }
-            } }),
-          )),
-        prot ? row('Remove password', 'Stores the vault unencrypted', h('button', { class: 'btn sm danger', text: 'Remove…', onclick: async () => {
-          const v = await ui.form({ title: 'Remove password?', message: 'The vault will be saved unencrypted and locking is disabled.', fields: [{ name: 'old', label: 'Current secret', type: 'password' }], okText: 'Remove', danger: true, validate: (x) => (x.old ? null : 'Required') });
-          if (!v) return;
-          try { await sec.removeSecret(v.old); ui.toast('Password removed', { type: 'warn' }); bus.emit('profile:change'); paint(); } catch (err) { ui.toast(err.message, { type: 'err' }); }
-        } })) : null,
-        row('Auto-lock after idle', prot ? 'Focus inside a cross-origin embedded site (e.g. Polotno) counts as activity — lock manually when you step away' : 'Requires a password', autoSel),
-        row('Sign out when locked for', prot ? 'After this long on the lock screen the encryption key is discarded from memory (full sign-out)' : 'Requires a password', h('select', { class: 'input sm', disabled: !prot, onchange: (e) => sec.setLockSignOut(+e.target.value) }, [[0, 'Never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']].map(([v, l]) => h('option', { value: v, text: l, selected: v === sec.getLockSignOut() })))),
+        row('Change password', 'Re-wraps the vault key with a fresh salt. Passkeys and encrypted files keep working.',
+          h('button', { class: 'btn sm primary', text: 'Change…', onclick: async () => {
+            const pwc = ui.passwordInput();
+            const v = await ui.form({ title: 'Change password',
+              fields: [{ name: 'old', label: 'Current password', type: 'password' }, ...secretFields(pwc)],
+              okText: 'Save', validate: (x) => (!x.old ? 'Enter your current password' : validateNew(x)) });
+            if (!v) return;
+            try { await sec.changeSecret(v.old, v.pw); ui.toast('Password changed', { type: 'ok' }); bus.emit('profile:change'); paint(); }
+            catch (err) { ui.toast(err.message, { type: 'err' }); }
+          } })),
+        row('Passkey / fingerprint', sec.passkeySupported() ? 'Unlock with Touch ID, Windows Hello, a phone or a security key. The key comes from the authenticator, not from anything typed, so it cannot be guessed offline the way a PIN can. Your password stays as the fallback.' : 'This browser cannot create passkeys here (needs HTTPS or localhost and WebAuthn).',
+          h('button', { class: 'btn sm', text: 'Add passkey…', disabled: !sec.passkeySupported(), onclick: async () => {
+            const v = await ui.form({ title: 'Add a passkey', message: 'Confirm your password, then your device will ask for your fingerprint, face, PIN or security key.',
+              fields: [{ name: 'label', label: 'Name this passkey', value: /iPhone|iPad/.test(navigator.userAgent) ? 'This iPhone / iPad' : 'This device' }, { name: 'old', label: 'Password', type: 'password' }],
+              okText: 'Continue', validate: (x) => (x.old ? null : 'Enter your password') });
+            if (!v) return;
+            try { await sec.addPasskey(v.old, v.label); ui.toast('Passkey added', { type: 'ok' }); paint(); }
+            catch (err) { ui.toast(err.name === 'NotAllowedError' ? 'Passkey setup was cancelled' : err.message, { type: 'err' }); }
+          } })),
+        ...sec.passkeys().map((k) => row('🔑 ' + k.label, 'Added ' + new Date(k.added).toLocaleDateString(), h('button', { class: 'btn sm danger', text: 'Remove', onclick: async () => {
+          if (!(await ui.confirm({ title: 'Remove passkey?', message: "'" + k.label + "' will no longer unlock this profile.", okText: 'Remove', danger: true }))) return;
+          await sec.removePasskey(k.cred); paint();
+        } }))),
+        row('Auto-lock after idle', 'Focus inside a cross-origin embedded site (e.g. Polotno) counts as activity — lock manually when you step away', autoSel),
+        row('Sign out when locked for', 'After this long on the lock screen the encryption key is discarded from memory (full sign-out)', h('select', { class: 'input sm', onchange: (e) => sec.setLockSignOut(+e.target.value) }, [[0, 'Never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']].map(([v, l]) => h('option', { value: v, text: l, selected: v === sec.getLockSignOut() })))),
         row('Lock now', null, h('button', { class: 'btn sm', html: icon('lock', 14) + ' Lock', onclick: lockNow })),
         h('h3', { text: 'Memory & clipboard' }),
         row('Purge memory now', 'Wipes every typed or generated password field and the clipboard — like “Purge memory” in System Vault', h('button', { class: 'btn sm danger', html: icon('trash', 14) + ' Purge now', onclick: () => ulyOS.purge.now('manual') })),
@@ -778,11 +783,11 @@
         row('Restore a backup', 'On the profile screen: sign out → Add profile → Import encrypted backup', h('button', { class: 'btn sm', text: 'Sign out…', onclick: () => sec.signOut() })),
         h('h3', { text: 'Danger zone' }),
         row('Delete this profile', 'Erases its vault, sandbox files and settings from this browser', h('button', { class: 'btn sm danger', text: 'Delete…', onclick: async () => {
-          const v = await ui.form({ title: "Delete '" + p.name + "'?", message: 'This permanently erases everything in this profile and signs you out.', fields: prot ? [{ name: 'old', label: 'Enter your ' + (p.cred === 'pin' ? 'PIN' : 'password') + ' to confirm', type: 'password' }] : [], okText: 'Delete forever', danger: true, validate: (x) => (prot && !x.old ? 'Required' : null) });
+          const v = await ui.form({ title: "Delete '" + p.name + "'?", message: 'This permanently erases everything in this profile and signs you out.', fields: [{ name: 'old', label: 'Enter your password to confirm', type: 'password' }], okText: 'Delete forever', danger: true, validate: (x) => (x.old ? null : 'Required') });
           if (!v) return;
           try { await sec.deleteSelf(v.old); } catch (err) { ui.toast(err.message, { type: 'err' }); }
         } })),
-        h('p', { class: 'set-desc', style: { marginTop: '18px' }, text: 'Note: Files in the sandbox are isolated per profile but are not encrypted at rest — right-click a file in Files → Encrypt… to protect it. GitHub Pages serves every ulyweb.github.io project from one origin, so other pages there share this browser’s storage; an unencrypted profile is readable by them.' }));
+        h('p', { class: 'set-desc', style: { marginTop: '18px' }, text: 'Files you save in the sandbox are encrypted automatically with a key derived from your vault key (AES-256-GCM); folders you mount from your computer stay as normal files. GitHub Pages serves every ulyweb.github.io project from one origin, so other pages there share this browser’s storage; an unencrypted profile is readable by them.' }));
     }
     bus.on('profile:change', () => { if (wrap.isConnected) paint(); });
     paint();

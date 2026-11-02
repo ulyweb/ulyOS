@@ -70,7 +70,7 @@
       message: [
         'Event: ' + (extra.source === 'import' ? 'profile restored from backup' : 'profile created'),
         'Profile name: ' + profile.name,
-        'Protected: ' + (profile.protected ? 'yes (' + profile.cred + ')' : 'no'),
+        'Protected: yes (password required)',
         'Contact email (optional, typed by the user): ' + (extra.contact || '—'),
         'Time: ' + new Date().toISOString(),
         'Site: ' + location.host + location.pathname + ' (ulyOS v' + (ulyOS.version || '?') + ')',

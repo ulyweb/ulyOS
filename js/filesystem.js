@@ -72,7 +72,41 @@
     opfsWorker.onmessage = (e) => { const p = wPending.get(e.data.id); if (!p) return; wPending.delete(e.data.id); e.data.ok ? p.res() : p.rej(new Error(e.data.err)); };
     return opfsWorker;
   }
+  /* ---- Transparent encryption for sandbox (OPFS) files: everything written under the profile's home
+     is sealed with a key derived from the vault master key; reads unseal on the fly. Mounted local
+     folders stay ordinary files. Files above MAX_SEAL are stored as-is (reported to the user). ---- */
+  const SMAGIC = new TextEncoder().encode('ULYSEC1\0');
+  const SEAL_OVERHEAD = 8 + 12 + 16;
+  const MAX_SEAL = 64 * 1024 * 1024;
+  const hasSealMagic = (u8) => u8.length >= SEAL_OVERHEAD && SMAGIC.every((b, i) => u8[i] === b);
+  async function inSandbox(handle) {
+    try { return !!roots.sandbox.handle && (await roots.sandbox.handle.resolve(handle)) !== null; } catch { return false; }
+  }
+  /** File with its decrypted contents (or the file itself if it is not sealed) */
+  async function readFile(handle) {
+    const f = await handle.getFile();
+    if (f.size < SEAL_OVERHEAD) return f;
+    if (!hasSealMagic(new Uint8Array(await f.slice(0, 8 + 12 + 16).arrayBuffer()))) return f;
+    const plain = await ulyOS.security.openFile(new Uint8Array(await f.arrayBuffer()));
+    return new File([plain], f.name, { type: f.type, lastModified: f.lastModified });
+  }
+  /** size shown to the user for a (possibly sealed) file */
+  async function plainSize(f) {
+    if (f.size < SEAL_OVERHEAD) return f.size;
+    return hasSealMagic(new Uint8Array(await f.slice(0, SEAL_OVERHEAD).arrayBuffer())) ? f.size - SEAL_OVERHEAD : f.size;
+  }
+  let bigWarned = 0;
+  async function maybeSeal(fh, data) {
+    if (!(await inSandbox(fh))) return data;
+    const buf = new Uint8Array(await new Response(data).arrayBuffer());
+    if (buf.length > MAX_SEAL) {
+      if (Date.now() - bigWarned > 5000) { bigWarned = Date.now(); ui.toast('A file over 64 MB was stored without encryption (too large to encrypt in memory)', { type: 'warn' }); ulyOS.audit('Large sandbox file stored unencrypted (over 64 MB)', 'warn'); }
+      return buf;
+    }
+    return ulyOS.security.sealFile(buf);
+  }
   async function writeHandle(fh, data) {
+    data = await maybeSeal(fh, data);
     if (canWritable) { const w = await fh.createWritable(); try { await w.write(data); } finally { await w.close(); } return; }
     const root = await navigator.storage.getDirectory();
     const path = await root.resolve(fh);
@@ -87,7 +121,7 @@
   }
   async function copyEntry(src, dstDir, newName) {
     if (src.kind === 'file') {
-      const f = await src.getFile();
+      const f = await readFile(src);
       await writeFile(dstDir, newName, f);
     } else {
       const nd = await dstDir.getDirectoryHandle(newName, { create: true });
@@ -141,11 +175,12 @@
         await writeFile(docs, 'Welcome.txt',
           'Welcome to ulyOS.\n\nThis file lives in your profile\'s sandboxed Origin Private File System inside your browser.\n' +
           '• Create folders and files with the toolbar or right-click.\n• Double-click a text file to edit it (Ctrl+S saves).\n' +
-          '• Right-click a file → Encrypt… to lock it with a password (AES-256-GCM).\n' +
+          '• Files here are encrypted automatically. Right-click a file → Encrypt… for an extra password-protected .uly copy you can share.\n' +
           '• Mount a real folder from your computer using "Open folder…" in the sidebar.\n• Drag files from your desktop into any Files window to upload them.\n');
         ulyOS.util.store.set('ulyos.fs.seeded', true);
       }
       roots.sandbox.handle = home;
+      sealLegacy(home).catch((e) => console.warn('[fs] migration', e));
       try { navigator.storage.persist?.(); } catch { /* ignore */ }
     } catch (err) {
       roots.sandbox.error = err;
@@ -155,6 +190,22 @@
     return !!roots.sandbox.handle;
   };
 
+  /** One-time: encrypt files that were saved before automatic encryption existed. */
+  async function sealLegacy(dir, top = true) {
+    if (top && ulyOS.vault.get('ulyos.fs.sealed') === '1') return;
+    let n = 0;
+    const walk = async (d) => {
+      for await (const [name, hd] of d.entries()) {
+        if (hd.kind === 'directory') { await walk(hd); continue; }
+        const f = await hd.getFile();
+        if (f.size > MAX_SEAL || hasSealMagic(new Uint8Array(await f.slice(0, SEAL_OVERHEAD).arrayBuffer()))) continue;
+        await writeHandle(hd, f); n++;
+      }
+    };
+    await walk(dir);
+    ulyOS.vault.set('ulyos.fs.sealed', '1');
+    if (n) ulyOS.audit(n + ' existing sandbox file(s) encrypted at rest', 'ok');
+  }
   FS.writeSandboxFile = async function (path, data) {
     if (!roots.sandbox.handle) throw new Error('Sandbox filesystem unavailable');
     const parts = path.split('/').filter(Boolean);
@@ -171,7 +222,7 @@
       const name = parts.pop();
       let d = roots.sandbox.handle;
       for (const p of parts) d = await d.getDirectoryHandle(p);
-      return await (await d.getFileHandle(name)).getFile();
+      return await readFile(await d.getFileHandle(name));
     } catch { return null; }
   };
 
@@ -319,7 +370,7 @@
     (async () => {
       if (handle) {
         try {
-          const f = await handle.getFile();
+          const f = await readFile(handle);
           if (f.size > 5 * 1024 * 1024 && !(await ui.confirm({ title: 'Large file', message: name + ' is ' + fmtBytes(f.size) + '. Open it anyway?', okText: 'Open' }))) { WM.close(win, { force: true }); return; }
           ta.value = await f.text();
         } catch (err) { ui.toast('Cannot read file: ' + err.message, { type: 'err' }); }
@@ -333,7 +384,7 @@
      Media / PDF viewer
      ========================================================================== */
   async function openViewer(handle, kind, pathLabel) {
-    const file = await handle.getFile();
+    const file = await readFile(handle);
     const url = URL.createObjectURL(file);
     let body;
     if (kind === 'image') body = h('img', { class: 'vw-img', src: url, alt: file.name, draggable: false });
@@ -486,7 +537,7 @@
         for await (const [name, handle] of this.dir.entries()) out.push({ name, handle, isDir: handle.kind === 'directory' });
         await Promise.all(out.map(async (e) => {
           if (e.isDir) { e.size = null; e.mtime = 0; return; }
-          try { const f = await e.handle.getFile(); e.size = f.size; e.mtime = f.lastModified; } catch { e.size = 0; e.mtime = 0; }
+          try { const f = await e.handle.getFile(); e.size = await plainSize(f); e.mtime = f.lastModified; } catch { e.size = 0; e.mtime = 0; }
         }));
         out.forEach((e) => { e.kind = kindOf(e.name, e.isDir); });
         if (this.dead) return;
@@ -683,7 +734,7 @@
       try {
         if (['image', 'audio', 'video', 'pdf'].includes(e.kind)) { await openViewer(e.handle, e.kind, label); ulyOS.audit("Opened '" + e.name + "' in viewer", 'info'); return; }
         if (e.kind === 'file') {
-          const f = await e.handle.getFile();
+          const f = await readFile(e.handle);
           if (await looksBinary(f)) { ui.toast("'" + e.name + "' is a binary file — use Download to save a copy", { type: 'info' }); return; }
         }
         this.openText(e);
@@ -756,7 +807,7 @@
       if (!v) return;
       try {
         for (const e of picks) {
-          const f = await e.handle.getFile();
+          const f = await readFile(e.handle);
           if (f.size > 200 * 1024 * 1024) throw new Error(e.name + ' is too large to encrypt in the browser (200 MB max)');
           const out = await ulyOS.crypto.encryptFile(new Uint8Array(await f.arrayBuffer()), v.pw, e.name);
           const nm = await uniqueName(this.dir, e.name + '.uly', ' copy');
@@ -770,7 +821,7 @@
       const pw = await ui.prompt({ title: "Decrypt '" + e.name + "'", label: 'Password', okText: 'Decrypt', validate: (x) => (x ? null : 'Enter the password') });
       if (pw == null) return;
       try {
-        const f = await e.handle.getFile();
+        const f = await readFile(e.handle);
         const { name, data } = await ulyOS.crypto.decryptFile(new Uint8Array(await f.arrayBuffer()), pw);
         const nm = await uniqueName(this.dir, name, ' (decrypted)');
         await writeFile(this.dir, nm, data);
@@ -800,7 +851,7 @@
       const picks = this.entries.filter((e) => this.sel.has(e.name));
       for (const e of picks) {
         if (e.isDir) { ui.toast("Folders can't be downloaded — open it and select files", { type: 'info' }); continue; }
-        const f = await e.handle.getFile();
+        const f = await readFile(e.handle);
         const a = h('a', { href: URL.createObjectURL(f), download: e.name });
         document.body.append(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(a.href), 5000);

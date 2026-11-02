@@ -203,13 +203,28 @@
     flush: () => flush(),
   });
 
-  async function writeVault(profile, data, key, salt, iter) {
-    let rec;
-    if (profile.protected) {
-      const { iv, ct } = await seal(key, enc.encode(JSON.stringify(data)), aadFor(profile.id));
-      rec = { v: 1, enc: true, iter, salt: b64.enc(salt), iv: b64.enc(iv), ct: b64.enc(ct) };
-    } else rec = { v: 1, enc: false, data };
-    localStorage.setItem(vkey(profile.id), JSON.stringify(rec));
+  /* v2 record: { v:2, wraps:[…], iv, ct }.  A random 256-bit master key M encrypts
+     the vault; M is stored only wrapped (AES-GCM) by a key derived from the password
+     (PBKDF2) and, optionally, by one derived from each passkey (WebAuthn PRF → HKDF).
+     Sub-keys for the vault and for sandbox files come from M via HKDF. */
+  const wrapAad = (id, type) => enc.encode('ulyOS-wrap-v2:' + id + ':' + type);
+  async function hkdfKey(raw, info, usages) {
+    const km = await crypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(32), info: enc.encode(info) }, km,
+      { name: 'AES-GCM', length: 256 }, false, usages || ['encrypt', 'decrypt']);
+  }
+  async function subKeys(mk) { return { dataKey: await hkdfKey(mk, 'ulyOS vault v2'), fileKey: await hkdfKey(mk, 'ulyOS files v2') }; }
+  async function wrapMaster(kek, mk, id, type) { const { iv, ct } = await seal(kek, mk, wrapAad(id, type)); return { iv: b64.enc(iv), ct: b64.enc(ct) }; }
+  async function unwrapMaster(kek, w, id, type) { return unseal(kek, b64.dec(w.iv), b64.dec(w.ct), wrapAad(id, type)); }
+  async function passwordWrap(secret, mk, id) {
+    const salt = rand(16), kek = await deriveKey(secret, salt, ITER);
+    return { type: 'password', salt: b64.enc(salt), iter: ITER, ...(await wrapMaster(kek, mk, id, 'password')) };
+  }
+
+  async function writeVault(profile, data, mk, wraps) {
+    const { dataKey } = await subKeys(mk);
+    const { iv, ct } = await seal(dataKey, enc.encode(JSON.stringify(data)), aadFor(profile.id));
+    localStorage.setItem(vkey(profile.id), JSON.stringify({ v: 2, wraps, iv: b64.enc(iv), ct: b64.enc(ct) }));
   }
   let timer = 0;
   function schedule() { clearTimeout(timer); timer = setTimeout(flush, 250); }
@@ -217,7 +232,7 @@
     clearTimeout(timer);
     if (!S) return Promise.resolve();
     const s = S;
-    s.chain = s.chain.then(() => writeVault(s.profile, Object.fromEntries(s.data), s.key, s.salt, s.iter)).catch((err) => {
+    s.chain = s.chain.then(() => writeVault(s.profile, Object.fromEntries(s.data), s.mk, s.wraps)).catch((err) => {
       console.error('[vault]', err);
       ui.toast(err.name === 'QuotaExceededError' ? 'Browser storage is full — export a backup and free some space' : 'Could not save profile data: ' + err.message, { type: 'err' });
     });
@@ -225,17 +240,41 @@
   }
   ['pagehide', 'visibilitychange'].forEach((ev) => window.addEventListener(ev, () => { if (ev === 'pagehide' || document.visibilityState === 'hidden') flush(); }));
 
-  async function openVault(profile, secret) {
+  const validWrap = (w) => w && typeof w.iv === 'string' && typeof w.ct === 'string' &&
+    (w.type === 'password' ? (w.iter >= 100000 && w.iter <= 5000000 && typeof w.salt === 'string') : (w.type === 'passkey' && typeof w.cred === 'string' && typeof w.prf === 'string'));
+
+  /** Opens a stored vault with {secret} or {prf: Uint8Array, cred}. Resolves
+      { data, mk, wraps, legacy:'none'|'v1', weak } — legacy ones must be upgraded by the caller. */
+  async function openVault(profile, cred) {
     const raw = localStorage.getItem(vkey(profile.id));
-    if (!raw) return { data: {}, key: null, salt: null, iter: 0 };
+    if (!raw) return { data: {}, mk: null, wraps: [], legacy: 'new' };
     const rec = JSON.parse(raw);
-    if (!rec.enc) return { data: rec.data || {}, key: null, salt: null, iter: 0 };
+    if (rec.v === 2) {
+      if (!Array.isArray(rec.wraps) || !rec.wraps.every(validWrap) || typeof rec.iv !== 'string' || typeof rec.ct !== 'string') throw new Error('this profile’s stored data looks corrupted');
+      let mk = null;
+      if (cred.prf) {
+        const w = rec.wraps.find((x) => x.type === 'passkey' && x.cred === cred.cred);
+        if (!w) throw new Error('bad-password');
+        try { mk = await unwrapMaster(await hkdfKey(cred.prf, 'ulyOS passkey wrap v2'), w, profile.id, 'passkey'); } catch { throw new Error('bad-password'); }
+      } else {
+        const w = rec.wraps.find((x) => x.type === 'password');
+        if (!w) throw new Error('bad-password');
+        const kek = await deriveKey(cred.secret, b64.dec(w.salt), w.iter);
+        try { mk = await unwrapMaster(kek, w, profile.id, 'password'); } catch { throw new Error('bad-password'); }
+      }
+      const { dataKey } = await subKeys(mk);
+      let plain;
+      try { plain = await unseal(dataKey, b64.dec(rec.iv), b64.dec(rec.ct), aadFor(profile.id)); } catch { throw new Error('this profile’s stored data looks corrupted'); }
+      return { data: JSON.parse(dec.decode(plain)), mk, wraps: rec.wraps, legacy: 'none' };
+    }
+    if (rec.v !== 1) throw new Error('unsupported profile data version');
+    if (!rec.enc) return { data: rec.data || {}, mk: null, wraps: [], legacy: 'plain' };   // v1 without a password
     if (!(rec.iter >= 100000 && rec.iter <= 5000000) || typeof rec.salt !== 'string' || typeof rec.iv !== 'string' || typeof rec.ct !== 'string') throw new Error('this profile’s stored data looks corrupted');
-    const salt = b64.dec(rec.salt);
-    const key = await deriveKey(secret, salt, rec.iter);
+    if (cred.prf) throw new Error('bad-password');
+    const key = await deriveKey(cred.secret, b64.dec(rec.salt), rec.iter);
     let plain;
     try { plain = await unseal(key, b64.dec(rec.iv), b64.dec(rec.ct), aadFor(profile.id)); } catch { throw new Error('bad-password'); }
-    return { data: JSON.parse(dec.decode(plain)), key, salt, iter: rec.iter };
+    return { data: JSON.parse(dec.decode(plain)), mk: null, wraps: [], legacy: 'v1', weak: profile.cred === 'pin' || !!policy(cred.secret, 'password') };
   }
 
   /* ------------------------------------------------------------------------
@@ -245,8 +284,8 @@
   const ping = () => { idleLast = Date.now(); };
 
   async function startSession(profile, opened) {
-    S = { profile, key: opened.key, salt: opened.salt, iter: opened.iter, data: new Map(Object.entries(opened.data)), chain: Promise.resolve(), locked: false, check: null };
-    if (profile.protected) S.check = await seal(S.key, enc.encode('ok'), aadFor(profile.id));
+    const keys = await subKeys(opened.mk);
+    S = { profile, mk: opened.mk, dataKey: keys.dataKey, fileKey: keys.fileKey, wraps: opened.wraps, data: new Map(Object.entries(opened.data)), chain: Promise.resolve(), locked: false };
     store.use({ getItem: (k) => vault.get(k), setItem: (k, v) => vault.set(k, v), removeItem: (k) => vault.remove(k) });
     localStorage.setItem(LASTKEY, profile.id);
     const fails = getFail(profile.id);
@@ -255,22 +294,20 @@
     hideAuth();
     try { navigator.storage?.persist?.(); } catch { /* ignore */ }
     bus.emit('session:start', { profile, failedAttempts: fails.n });
-    ulyOS.audit("Profile '" + profile.name + "' signed in (" + (profile.protected ? 'encrypted vault unlocked' : 'no password set') + ')', 'ok');
+    ulyOS.audit("Profile '" + profile.name + "' signed in (encrypted vault unlocked)", 'ok');
     if (fails.n) ulyOS.audit(fails.n + ' failed unlock attempt(s) were recorded for this profile before this sign-in', 'warn');
     startIdle();
   }
 
   async function verifySecret(secret) {
-    if (!S || !S.profile.protected) return true;
-    try {
-      const key = await deriveKey(secret, S.salt, S.iter);
-      await unseal(key, S.check.iv, S.check.ct, aadFor(S.profile.id));
-      return true;
-    } catch { return false; }
+    if (!S) return false;
+    const w = S.wraps.find((x) => x.type === 'password');
+    if (!w) return false;
+    try { await unwrapMaster(await deriveKey(secret, b64.dec(w.salt), w.iter), w, S.profile.id, 'password'); return true; } catch { return false; }
   }
 
   function lock(reason) {
-    if (!S || !S.profile.protected) return false;
+    if (!S) return false;
     if (S.locked) return true;
     S.locked = true;
     S.lockedAt = Date.now();
@@ -303,7 +340,7 @@
   function startIdle() {
     ['pointerdown', 'keydown', 'wheel', 'pointermove', 'touchstart'].forEach((e) => document.addEventListener(e, ping, { passive: true, capture: true }));
     idleTimer = setInterval(() => {
-      if (!S || !S.profile.protected) return;
+      if (!S) return;
       if (S.locked) {   // locked for too long → throw the key away (full sign-out)
         const lm = +(vault.get('ulyos.locksignout') ?? 15);
         if (lm && Date.now() - S.lockedAt > lm * 60000) { ulyOS.audit('Signed out automatically after ' + lm + ' min locked — encryption key discarded from memory', 'warn'); signOut(); }
@@ -321,25 +358,41 @@
   /* ------------------------------------------------------------------------
      Profile operations
      ------------------------------------------------------------------------ */
-  async function createProfile({ name, color, secret, cred, data }) {
+  async function createProfile({ name, color, secret, data }) {
+    if (!secret) throw new Error('A password is required');
+    const bad = policy(secret, 'password');
+    if (bad) throw new Error(bad);
     const list = loadProfiles();
     const isFirst = list.length === 0;
     let n = name.trim() || 'Profile', base = n, i = 2;
     while (list.some((p) => p.name.toLowerCase() === n.toLowerCase())) n = base + ' ' + i++;
     const profile = {
       id: 'p_' + [...rand(5)].map((b) => b.toString(16).padStart(2, '0')).join(''),
-      name: n, color: color || COLORS[list.length % COLORS.length], protected: !!secret, cred: secret ? cred || 'password' : 'none', created: Date.now(),
+      name: n, color: color || COLORS[list.length % COLORS.length], protected: true, cred: 'password', created: Date.now(),
     };
     const vdata = data || {};
     if (isFirst && !data) {   // adopt data from a pre-profile install, then remove the plaintext copies
       LEGACY_KEYS.forEach((k) => { const v = localStorage.getItem(k); if (v != null) { vdata[k] = v; localStorage.removeItem(k); } });
     }
-    let key = null, salt = null;
-    if (secret) { salt = rand(16); key = await deriveKey(secret, salt, ITER); }
-    await writeVault(profile, vdata, key, salt, ITER);
+    const mk = rand(32);
+    const wraps = [await passwordWrap(secret, mk, profile.id)];
+    await writeVault(profile, vdata, mk, wraps);
     list.push(profile);
     saveProfiles(list);
-    return { profile, opened: { data: vdata, key, salt, iter: ITER } };
+    return { profile, opened: { data: vdata, mk, wraps } };
+  }
+
+  /** Turns a v1 / unprotected vault into a v2 vault protected by `secret`. */
+  async function upgradeVault(profile, opened, secret) {
+    const bad = policy(secret, 'password');
+    if (bad) throw new Error(bad);
+    const mk = rand(32);
+    const wraps = [await passwordWrap(secret, mk, profile.id)];
+    await writeVault(profile, opened.data, mk, wraps);
+    profile.protected = true; profile.cred = 'password';
+    patchProfile(profile);
+    ulyOS.audit("Vault of '" + profile.name + "' upgraded to the v2 key hierarchy" + (opened.legacy === 'plain' ? ' — a password is now required' : ''), 'warn');
+    return { data: opened.data, mk, wraps };
   }
 
   async function removeProfileData(id) {
@@ -350,25 +403,94 @@
     try { await new Promise((res) => { const r = indexedDB.open('ulyos-fs', 1); r.onsuccess = () => { try { const tx = r.result.transaction('kv', 'readwrite'); tx.objectStore('kv').delete('localRoot:' + id); tx.oncomplete = res; } catch { res(); } }; r.onerror = res; r.onupgradeneeded = () => r.result.createObjectStore('kv'); }); } catch { /* ignore */ }
   }
 
-  async function changeSecret(oldSecret, newSecret, cred) {
-    if (S.profile.protected && !(await verifySecret(oldSecret))) throw new Error('Current password is incorrect');
-    const salt = rand(16);
-    S.key = await deriveKey(newSecret, salt, ITER);
-    S.salt = salt; S.iter = ITER;
-    S.profile.protected = true; S.profile.cred = cred || 'password';
-    S.check = await seal(S.key, enc.encode('ok'), aadFor(S.profile.id));
+  async function changeSecret(oldSecret, newSecret) {
+    if (!(await verifySecret(oldSecret))) throw new Error('Current password is incorrect');
+    const bad = policy(newSecret, 'password');
+    if (bad) throw new Error(bad);
+    const pw = await passwordWrap(newSecret, S.mk, S.profile.id);   // master key unchanged → passkeys and files keep working
+    S.wraps = S.wraps.map((w) => (w.type === 'password' ? pw : w));
+    S.profile.protected = true; S.profile.cred = 'password';
     patchProfile(S.profile);
     await flush();
-    ulyOS.audit('Profile password ' + (oldSecret == null ? 'set' : 'changed') + ' — vault re-encrypted with a new salt', 'warn');
+    ulyOS.audit('Profile password changed — new salt, master key re-wrapped', 'warn');
   }
-  async function removeSecret(oldSecret) {
-    if (!(await verifySecret(oldSecret))) throw new Error('Password is incorrect');
-    S.key = null; S.salt = null; S.iter = 0; S.check = null;
-    S.profile.protected = false; S.profile.cred = 'none';
-    patchProfile(S.profile);
+
+  /* ------------------------------------------------------------------------
+     Passkeys (WebAuthn PRF). The authenticator returns a 256-bit secret that never
+     leaves the device and cannot be guessed offline, unlike a PIN. The vault master
+     key is wrapped with it. The password always remains as the recovery path.
+     ------------------------------------------------------------------------ */
+  const b64u = { enc: (u8) => b64.enc(u8).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), dec: (s) => b64.dec(s.replace(/-/g, '+').replace(/_/g, '/')) };
+  const passkeySupported = () => !!(window.PublicKeyCredential && navigator.credentials && hasCrypto);
+  async function passkeyGet(wraps) {
+    const list = wraps.filter((w) => w.type === 'passkey');
+    if (!list.length) throw new Error('No passkey is set up for this profile');
+    const evalByCredential = {};
+    list.forEach((w) => { evalByCredential[b64u.enc(b64.dec(w.cred))] = { first: b64.dec(w.prf) }; });
+    const cred = await navigator.credentials.get({ publicKey: {
+      challenge: rand(32), rpId: location.hostname, userVerification: 'required', timeout: 60000,
+      allowCredentials: list.map((w) => ({ type: 'public-key', id: b64.dec(w.cred) })),
+      extensions: { prf: { evalByCredential } },
+    } });
+    const out = cred && cred.getClientExtensionResults().prf;
+    if (!out || !out.results || !out.results.first) throw new Error('This passkey did not return a key (its authenticator lacks the PRF extension)');
+    return { cred: b64.enc(new Uint8Array(cred.rawId)), prf: new Uint8Array(out.results.first) };
+  }
+  async function addPasskey(secret, label) {
+    if (!passkeySupported()) throw new Error('Passkeys are not available in this browser');
+    if (!(await verifySecret(secret))) throw new Error('Password is incorrect');
+    const prfSalt = rand(32);
+    const made = await navigator.credentials.create({ publicKey: {
+      challenge: rand(32), rp: { name: 'ulyOS', id: location.hostname },
+      user: { id: rand(16), name: S.profile.name, displayName: S.profile.name },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+      authenticatorSelection: { residentKey: 'preferred', userVerification: 'required' }, timeout: 60000,
+      extensions: { prf: { eval: { first: prfSalt } } },
+    } });
+    const credId = new Uint8Array(made.rawId);
+    const ext = made.getClientExtensionResults().prf;
+    if (!ext || ext.enabled === false) throw new Error('This device or browser does not support the passkey PRF extension (needed to derive an encryption key)');
+    let prf = ext.results && ext.results.first ? new Uint8Array(ext.results.first) : null;
+    if (!prf) {   // some authenticators only evaluate on a second, assertion step
+      const tmp = { type: 'passkey', cred: b64.enc(credId), prf: b64.enc(prfSalt) };
+      prf = (await passkeyGet([tmp])).prf;
+    }
+    const kek = await hkdfKey(prf, 'ulyOS passkey wrap v2');
+    const w = { type: 'passkey', cred: b64.enc(credId), prf: b64.enc(prfSalt), label: (label || 'Passkey').slice(0, 40), added: Date.now(), ...(await wrapMaster(kek, S.mk, S.profile.id, 'passkey')) };
+    S.wraps = [...S.wraps, w];
     await flush();
-    ulyOS.audit('Profile password REMOVED — vault is stored unencrypted', 'warn');
+    ulyOS.audit("Passkey '" + w.label + "' added", 'warn');
+    return w;
   }
+  async function removePasskey(credB64) {
+    S.wraps = S.wraps.filter((w) => !(w.type === 'passkey' && w.cred === credB64));
+    await flush();
+    ulyOS.audit('Passkey removed', 'warn');
+  }
+  const passkeys = () => (S ? S.wraps.filter((w) => w.type === 'passkey').map((w) => ({ cred: w.cred, label: w.label, added: w.added })) : []);
+  function profilePasskeys(id) {
+    try { const r = JSON.parse(localStorage.getItem(vkey(id))); return r && r.v === 2 ? r.wraps.filter((w) => w.type === 'passkey') : []; } catch { return []; }
+  }
+
+  /* ------------------------------------------------------------------------
+     Sandbox file encryption: "ULYSEC1\0" | iv(12) | AES-GCM(fileKey, bytes, aad=magic)
+     fileKey is derived from the master key, so it never touches disk.
+     ------------------------------------------------------------------------ */
+  const SMAGIC = enc.encode('ULYSEC1\0');
+  const isSealed = (u8) => u8.length >= 8 + 12 + 16 && SMAGIC.every((b, i) => u8[i] === b);
+  async function sealFile(u8) {
+    if (!S) throw new Error('No active session');
+    const { iv, ct } = await seal(S.fileKey, u8, SMAGIC);
+    const out = new Uint8Array(8 + 12 + ct.length);
+    out.set(SMAGIC, 0); out.set(iv, 8); out.set(ct, 20);
+    return out;
+  }
+  async function openFile(u8) {
+    if (!S) throw new Error('No active session');
+    if (!isSealed(u8)) return u8;   // legacy plaintext file
+    return unseal(S.fileKey, u8.subarray(8, 20), u8.subarray(20), SMAGIC);
+  }
+
   function patchProfile(p) { saveProfiles(loadProfiles().map((x) => (x.id === p.id ? { ...x, ...p } : x))); }
 
   async function exportProfile(pass) {
@@ -511,7 +633,7 @@
     document.body.classList.add('auth-open');
     const card = h('div', { class: 'auth-card' }, view);
     el.replaceChildren(h('div', { class: 'auth-brand' }, h('span', { class: 'auth-logo', html: '<svg viewBox="0 0 80 80" width="28" height="28"><circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="40" cy="40" r="5" fill="currentColor"/></svg>' }), h('span', { text: 'uly' }), h('b', { text: 'OS' })), card,
-      h('div', { class: 'auth-foot' }, hasCrypto ? 'PBKDF2-SHA256 · AES-256-GCM · everything stays on this device' : '⚠ Secure context required (HTTPS or localhost) — encryption unavailable',
+      h('div', { class: 'auth-foot' }, hasCrypto ? 'PBKDF2-SHA256 · AES-256-GCM · passkeys · everything stays on this device' : '⚠ Secure context required (HTTPS or localhost) — encryption unavailable',
         ulyOS.admin && ulyOS.admin.enabled() ? [h('span', { class: 'sep', text: ' | ' }), h('a', { href: '#', class: 'footlink', text: 'Contact Admin', onclick: (e) => { e.preventDefault(); ulyOS.admin.contact(); } })] : null));
     const f = card.querySelector('input:not([type=hidden]),button.primary');
     setTimeout(() => f && f.focus && f.focus(), 40);
@@ -532,7 +654,7 @@
       const c = h('button', { class: 'prof' + (p.id === last ? ' last' : ''), onclick: () => showAuth(loginView(p)) },
         avatar(p, 72),
         h('div', { class: 'prof-name', text: p.name }),
-        h('div', { class: 'prof-sub', html: (p.protected ? icon('lock', 12) + ' ' + (p.cred === 'pin' ? 'PIN' : 'Password') : 'No password') }));
+        h('div', { class: 'prof-sub', html: p.protected ? icon('lock', 12) + ' Password' + (profilePasskeys(p.id).length ? ' · Passkey' : '') : icon('lock', 12) + ' Password needed' }));
       c.addEventListener('contextmenu', (e) => {
         e.preventDefault(); e.stopPropagation();
         ui.contextMenu(e.clientX, e.clientY, [
@@ -550,11 +672,9 @@
 
   async function deleteFromPicker(p) {
     let ok = false;
-    if (p.protected) {
-      const pw = await ui.prompt({ title: "Delete '" + p.name + "'?", message: 'This permanently erases the profile, its encrypted data and its sandbox files. Enter its ' + (p.cred === 'pin' ? 'PIN' : 'password') + ' to confirm.', label: p.cred === 'pin' ? 'PIN' : 'Password', okText: 'Delete', validate: (v) => (v ? null : 'Required') });
-      if (pw == null) return;
-      try { await openVault(p, pw); ok = true; } catch { ui.toast('Incorrect ' + (p.cred === 'pin' ? 'PIN' : 'password') + ' — profile not deleted', { type: 'err' }); return; }
-    } else ok = await ui.confirm({ title: "Delete '" + p.name + "'?", message: 'This permanently erases the profile, its data and its sandbox files.', okText: 'Delete', danger: true });
+    const pw = await ui.prompt({ title: "Delete '" + p.name + "'?", message: 'This permanently erases the profile, its encrypted data and its sandbox files. Enter its password to confirm.', label: 'Password', okText: 'Delete', validate: (v) => (v ? null : 'Required') });
+    if (pw == null) return;
+    try { await openVault(p, { secret: pw }); ok = true; } catch { ui.toast('Incorrect password — profile not deleted', { type: 'err' }); return; }
     if (!ok) return;
     await removeProfileData(p.id);
     ui.toast("Profile '" + p.name + "' deleted", { type: 'ok' });
@@ -562,16 +682,13 @@
   }
 
   function loginView(p, { lock: isLock = false } = {}) {
-    const isPin = p.cred === 'pin';
-    const input = h('input', { class: 'input auth-input', type: 'password', placeholder: isPin ? 'PIN' : 'Password', autocomplete: 'off', 'aria-label': isPin ? 'PIN' : 'Password' });
-    if (isPin) { input.inputMode = 'numeric'; input.maxLength = 12; input.addEventListener('input', () => { input.value = input.value.replace(/\D/g, ''); }); }
+    const input = h('input', { class: 'input auth-input', type: 'password', placeholder: 'Password', autocomplete: 'off', 'aria-label': 'Password' });
     const err = h('div', { class: 'auth-err', role: 'alert' });
-    const go = h('button', { class: 'btn primary auth-go', type: 'submit' }, p.protected ? 'Unlock' : 'Sign in');
+    const go = h('button', { class: 'btn primary auth-go', type: 'submit' }, 'Unlock');
     const eye = h('button', { class: 'auth-eye', type: 'button', title: 'Show / hide', html: icon('search', 16), onclick: () => { input.type = input.type === 'password' ? 'text' : 'password'; input.focus(); } });
-    const keypad = isPin ? h('div', { class: 'keypad' }, ['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', '↵'].map((k) => h('button', {
-      type: 'button', class: 'key', text: k,
-      onclick: () => { if (k === '⌫') input.value = input.value.slice(0, -1); else if (k === '↵') form.requestSubmit(); else if (input.value.length < 12) input.value += k; input.focus(); },
-    }))) : null;
+    const wraps = isLock && S ? S.wraps : profilePasskeys(p.id);
+    const hasPk = wraps.some((w) => w.type === 'passkey') && passkeySupported();
+    const pkBtn = hasPk ? h('button', { type: 'button', class: 'btn auth-passkey', html: icon('lock', 15) + ' <span>Use passkey / fingerprint</span>' }) : null;
 
     let cd = 0;
     const tick = () => {
@@ -579,41 +696,77 @@
       if (left > 0) { go.disabled = true; err.textContent = 'Too many attempts — try again in ' + left + 's'; cd = setTimeout(tick, 250); }
       else { go.disabled = false; if (err.textContent.startsWith('Too many')) err.textContent = ''; }
     };
+    const bad = (msg) => {
+      const f = getFail(p.id); f.n++;
+      f.until = f.n >= 3 ? Date.now() + Math.min(60, 2 ** (f.n - 2)) * 1000 : 0;
+      setFail(p.id, f);
+      err.textContent = msg + (f.n >= 3 ? '' : ' (' + f.n + ')');
+      input.value = ''; input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake'); input.focus();
+      if (f.n >= 3) tick();
+      if (isLock && S) ulyOS.audit('Failed unlock attempt on locked session', 'warn');
+    };
+
+    /** shared tail: legacy vaults are upgraded (or forced to choose a password) before the session starts */
+    async function enter(opened, secret) {
+      if (opened.legacy === 'plain' || opened.weak) { showAuth(setPasswordView(p, opened, opened.legacy === 'plain' ? 'plain' : (p.cred === 'pin' ? 'pin' : 'weak'))); return; }
+      if (opened.legacy === 'v1') opened = await upgradeVault(p, opened, secret);
+      await startSession(p, opened);
+    }
 
     async function submit(e) {
       e.preventDefault();
       if (busy || go.disabled) return;
-      if (p.protected && !input.value) { err.textContent = 'Enter your ' + (isPin ? 'PIN' : 'password'); return; }
       busy = true; go.disabled = true; err.textContent = ''; go.classList.add('busy');
       const label = go.textContent; go.textContent = 'Deriving key…';
       await new Promise((r) => setTimeout(r, 30));   // let the UI paint before PBKDF2 blocks the thread
       try {
+        if (p.protected && !input.value) { err.textContent = 'Enter your password'; busy = false; go.classList.remove('busy'); go.textContent = label; go.disabled = false; return; }
         if (isLock) {
           if (!(await verifySecret(input.value))) throw new Error('bad-password');
           unlockSession();
         } else {
-          const opened = await openVault(p, input.value);
-          await startSession(p, opened);
+          const secret = p.protected ? input.value : '';
+          const opened = await openVault(p, { secret });
+          await enter(opened, secret);
         }
         busy = false;
       } catch (ex) {
         busy = false; go.classList.remove('busy'); go.textContent = label; go.disabled = false;
-        if (ex.message === 'bad-password') {
-          const f = getFail(p.id); f.n++;
-          f.until = f.n >= 3 ? Date.now() + Math.min(60, 2 ** (f.n - 2)) * 1000 : 0;
-          setFail(p.id, f);
-          err.textContent = 'Incorrect ' + (isPin ? 'PIN' : 'password') + (f.n >= 3 ? '' : ' (' + f.n + ')');
-          input.value = ''; input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake'); input.focus();
-          if (f.n >= 3) tick();
-          if (isLock && S) ulyOS.audit('Failed unlock attempt on locked session', 'warn');
-        } else { err.textContent = 'Could not open profile: ' + ex.message; console.error(ex); }
+        if (ex.message === 'bad-password') bad('Incorrect password');
+        else { err.textContent = 'Could not open profile: ' + ex.message; console.error(ex); }
       }
     }
 
+    if (pkBtn) pkBtn.addEventListener('click', async () => {
+      if (busy) return;
+      busy = true; err.textContent = '';
+      try {
+        const got = await passkeyGet(wraps);
+        if (isLock) {
+          const w = S.wraps.find((x) => x.type === 'passkey' && x.cred === got.cred);
+          if (!w) throw new Error('bad-password');
+          try { await unwrapMaster(await hkdfKey(got.prf, 'ulyOS passkey wrap v2'), w, S.profile.id, 'passkey'); } catch { throw new Error('bad-password'); }
+          unlockSession();
+          ulyOS.audit('Session unlocked with a passkey', 'ok');
+        } else {
+          const opened = await openVault(p, { prf: got.prf, cred: got.cred });
+          await startSession(p, opened);
+          ulyOS.audit('Signed in with a passkey', 'ok');
+        }
+      } catch (ex) {
+        if (ex.message === 'bad-password') bad('That passkey did not unlock this profile');
+        else if (ex.name === 'NotAllowedError' || ex.name === 'AbortError') err.textContent = 'Passkey prompt was cancelled';
+        else { err.textContent = ex.message || 'Passkey unlock failed'; console.warn(ex); }
+      }
+      busy = false;
+    });
+
     const form = h('form', { class: 'auth-form', onsubmit: submit },
       avatar(p, 88), h('h2', { class: 'auth-name', text: p.name }),
-      p.protected ? h('div', { class: 'auth-input-wrap' }, input, eye) : h('p', { class: 'auth-sub', text: 'This profile has no password. Add one in Settings → Security.' }),
-      keypad, err, go,
+      !p.protected ? h('p', { class: 'auth-sub', text: 'This profile was created before passwords were required. Press Continue to choose one.' }) : null,
+      p.protected ? h('div', { class: 'auth-input-wrap' }, input, eye) : null,
+      err, p.protected ? go : h('button', { class: 'btn primary auth-go', type: 'submit', text: 'Continue' }),
+      pkBtn,
       h('div', { class: 'auth-links' }, isLock
         ? h('button', { type: 'button', class: 'link', onclick: () => signOut(), text: 'Switch profile' })
         : h('button', { type: 'button', class: 'link', onclick: () => showAuth(pickView()), text: '← All profiles' })));
@@ -623,45 +776,65 @@
     return form;
   }
 
+  /** Blocking step shown for profiles created before passwords were mandatory (or protected by a PIN / weak password). */
+  function setPasswordView(p, opened, why) {
+    const pwc = passwordInput({ mode: 'password' });
+    const err = h('div', { class: 'auth-err', role: 'alert' });
+    const btn = h('button', { class: 'btn primary auth-go', type: 'submit', text: 'Set password and continue' });
+    const form = h('form', { class: 'auth-form wide', onsubmit: async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      err.textContent = '';
+      const sec = pwc.value();
+      const pe = policy(sec, 'password');
+      if (pe) { err.textContent = pe; return; }
+      if (sec !== pwc.confirm()) { err.textContent = 'Entries do not match'; return; }
+      busy = true; btn.disabled = true; btn.textContent = 'Encrypting…';
+      await new Promise((r) => setTimeout(r, 30));
+      try { const up = await upgradeVault(p, opened, sec); busy = false; await startSession(p, up); }
+      catch (ex) { busy = false; btn.disabled = false; btn.textContent = 'Set password and continue'; err.textContent = ex.message; }
+    } },
+      avatar(p, 72), h('h2', { class: 'auth-name', text: 'Choose a strong password' }),
+      h('p', { class: 'auth-sub', text: why === 'plain' ? 'Every profile now requires a password. Yours is currently stored without one, so anyone with access to this browser could read it.' : why === 'pin' ? 'PINs are too easy to guess offline, so ulyOS now requires a password for every profile.' : 'Your current password is below ulyOS’s minimum strength. Choose a stronger one to keep going.' }),
+      pwc.el,
+      h('p', { class: 'auth-note', text: 'There is no recovery. If you forget this password the encrypted data cannot be restored — keep an encrypted backup (Settings → Security).' }),
+      err, btn,
+      h('div', { class: 'auth-links' }, h('button', { type: 'button', class: 'link', onclick: () => showAuth(pickView()), text: '← All profiles' })));
+    form._dispose = () => pwc.dispose();
+    return form;
+  }
+
   function createView({ first = false }) {
     let color = COLORS[loadProfiles().length % COLORS.length];
-    let cred = 'password';
     const name = h('input', { class: 'input', placeholder: 'Profile name', maxLength: 24, autocomplete: 'off', 'aria-label': 'Profile name' });
     const pwc = passwordInput({ mode: 'password' });
     const err = h('div', { class: 'auth-err', role: 'alert' });
-    const protect = h('input', { type: 'checkbox', checked: true });
     const secretBox = h('div', { class: 'secret-box' });
     const swatches = h('div', { class: 'swatches' });
     const prev = h('div', { class: 'prev' });
-    const credBox = h('div', { class: 'seg' });
     const notify = !!(ulyOS.admin && ulyOS.admin.notifyEnabled());
     const contact = h('input', { class: 'input', type: 'email', placeholder: 'Your email (optional — lets the admin reach you)', autocomplete: 'email', 'aria-label': 'Optional contact email' });
 
     const paintPrev = () => prev.replaceChildren(avatar({ name: name.value || '?', color }, 72));
     const paintSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { type: 'button', class: 'swatch' + (c === color ? ' active' : ''), style: { background: c }, 'aria-label': c, onclick: () => { color = c; paintSw(); paintPrev(); } })));
-    const credSeg = () => credBox.replaceChildren(...[['password', 'Password'], ['pin', 'PIN']].map(([v, l]) => h('button', { type: 'button', class: cred === v ? 'active' : '', text: l, onclick: () => { cred = v; pwc.setMode(v); credSeg(); } })));
     name.addEventListener('input', paintPrev);
-    secretBox.append(credBox, pwc.el,
+    secretBox.append(pwc.el,
       h('p', { class: 'auth-note', text: 'There is no recovery. If you forget this password the profile’s encrypted data cannot be restored — keep an encrypted backup (Settings → Security).' }));
-    protect.addEventListener('change', () => { secretBox.hidden = !protect.checked; });
 
     const submit = async (e) => {
       e.preventDefault();
       if (busy) return;
       err.textContent = '';
       if (!name.value.trim()) { err.textContent = 'Enter a profile name'; name.focus(); return; }
-      let sec = null;
-      if (protect.checked) {
-        if (!hasCrypto) { err.textContent = 'Encryption needs HTTPS or localhost'; return; }
-        sec = pwc.value();
-        const pe = policy(sec, cred);
-        if (pe) { err.textContent = pe; return; }
-        if (sec !== pwc.confirm()) { err.textContent = 'Entries do not match'; return; }
-      }
-      busy = true; btn.disabled = true; btn.textContent = sec ? 'Encrypting…' : 'Creating…';
+      if (!hasCrypto) { err.textContent = 'Encryption needs HTTPS or localhost'; return; }
+      const sec = pwc.value();
+      const pe = policy(sec, 'password');
+      if (pe) { err.textContent = pe; return; }
+      if (sec !== pwc.confirm()) { err.textContent = 'Entries do not match'; return; }
+      busy = true; btn.disabled = true; btn.textContent = 'Encrypting…';
       await new Promise((r) => setTimeout(r, 30));
       try {
-        const { profile, opened } = await createProfile({ name: name.value, color, secret: sec, cred });
+        const { profile, opened } = await createProfile({ name: name.value, color, secret: sec });
         busy = false;
         if (ulyOS.admin) ulyOS.admin.notifyNewProfile(profile, { contact: contact.value.trim().slice(0, 120) });
         await startSession(profile, opened);
@@ -670,16 +843,15 @@
     const btn = h('button', { class: 'btn primary auth-go', type: 'submit', text: 'Create profile' });
     const form = h('form', { class: 'auth-form wide', onsubmit: submit },
       h('h2', { class: 'auth-name', text: first ? 'Create your profile' : 'New profile' }),
-      first ? h('p', { class: 'auth-sub', text: 'Your desktop, files and app data live in a profile. Protect it with a password to encrypt everything at rest.' }) : null,
+      first ? h('p', { class: 'auth-sub', text: 'Your desktop, files and app data live in a profile. It is protected by a password that encrypts everything at rest.' }) : null,
       prev, name, swatches,
-      h('label', { class: 'check' }, protect, h('span', { text: 'Protect with a password (recommended)' })),
       secretBox,
       notify ? h('div', { class: 'notice' }, h('div', { class: 'notice-text', html: 'ℹ ' }, ulyOS.admin.disclosure), contact) : null,
       err, btn,
       h('div', { class: 'auth-links' },
         first ? null : h('button', { type: 'button', class: 'link', onclick: () => showAuth(pickView()), text: '← All profiles' }),
         h('button', { type: 'button', class: 'link', onclick: () => showAuth(importView(first)), text: 'Import encrypted backup…' })));
-    credSeg(); paintSw(); paintPrev();
+    paintSw(); paintPrev();
     form._dispose = () => pwc.dispose();
     return form;
   }
@@ -687,6 +859,7 @@
   function importView(first) {
     const file = h('input', { type: 'file', accept: '.ulyprofile,application/json', class: 'input' });
     const pass = h('input', { type: 'password', class: 'input', placeholder: 'Backup password', autocomplete: 'off' });
+    const np = h('input', { type: 'password', class: 'input', placeholder: 'Profile password (blank = reuse the backup password)', autocomplete: 'new-password' });
     const err = h('div', { class: 'auth-err', role: 'alert' });
     const btn = h('button', { class: 'btn primary auth-go', type: 'submit', text: 'Import profile' });
     const form = h('form', { class: 'auth-form wide', onsubmit: async (e) => {
@@ -697,16 +870,16 @@
       await new Promise((r) => setTimeout(r, 30));
       try {
         const b = await decryptBackup(await file.files[0].text(), pass.value);
-        const { profile, opened } = await createProfile({ name: b.name, color: b.color, secret: pass.value, cred: 'password', data: b.data });
+        const { profile, opened } = await createProfile({ name: b.name, color: b.color, secret: np.value || pass.value, data: b.data });
         busy = false;
         if (ulyOS.admin) ulyOS.admin.notifyNewProfile(profile, { source: 'import' });
         await startSession(profile, opened);
-        ulyOS.audit("Profile '" + profile.name + "' restored from encrypted backup (protected with the backup password)", 'ok');
+        ulyOS.audit("Profile '" + profile.name + "' restored from encrypted backup (protected with a new password)", 'ok');
       } catch (ex) { busy = false; btn.disabled = false; btn.textContent = 'Import profile'; err.textContent = ex.message; }
     } },
       h('h2', { class: 'auth-name', text: 'Import encrypted backup' }),
-      h('p', { class: 'auth-sub', text: 'Restores desktop layout, settings, audit log and app data from a .ulyprofile file. Sandbox files are not included. The new profile is protected with the backup password.' }),
-      file, pass,
+      h('p', { class: 'auth-sub', text: 'Restores desktop layout, settings, audit log and app data from a .ulyprofile file. Sandbox files are not included. The new profile needs a password: by default the backup password, if it is strong enough.' }),
+      file, pass, np,
       ulyOS.admin && ulyOS.admin.notifyEnabled() ? h('p', { class: 'auth-note', text: 'The site admin is notified by email that a profile was restored (profile name only). Passwords, keys, files and app data are never sent.' }) : null,
       err, btn,
       h('div', { class: 'auth-links' }, h('button', { type: 'button', class: 'link', onclick: () => showAuth(first ? createView({ first: true }) : pickView()), text: '← Back' })));
@@ -721,15 +894,22 @@
     injectShim,
     profile: () => (S ? { ...S.profile } : null),
     profileId: () => S?.profile.id || null,
-    isProtected: () => !!S?.profile.protected,
+    isProtected: () => true,
     isLocked: () => !!S?.locked,
     lock,
     signOut,
     verifySecret,
     changeSecret,
-    removeSecret,
+    upgradeVault,
+    passkeySupported,
+    passkeys,
+    addPasskey,
+    removePasskey,
+    sealFile,
+    openFile,
+    isSealed,
     exportProfile,
-    vaultInfo: () => ({ iterations: S?.iter || 0, protected: !!S?.profile.protected, keys: vault.keys().length, bytes: (localStorage.getItem(vkey(S?.profile.id)) || '').length, failedAttempts: S ? 0 : 0 }),
+    vaultInfo: () => ({ iterations: S?.wraps.find((w) => w.type === 'password')?.iter || 0, passkeys: passkeys().length, protected: true, keys: vault.keys().length, bytes: (localStorage.getItem(vkey(S?.profile.id)) || '').length, failedAttempts: S ? 0 : 0 }),
     getAutoLock: () => +(vault.get('ulyos.autolock') ?? 5),
     getLockSignOut: () => +(vault.get('ulyos.locksignout') ?? 15),
     setLockSignOut: (m) => { vault.set('ulyos.locksignout', String(m)); ulyOS.audit('Sign out after lock set to ' + (m ? m + ' min' : 'never'), 'info'); },
@@ -737,7 +917,7 @@
     rename(n) { n = n.trim(); if (!n) return; ulyOS.audit("Profile renamed '" + S.profile.name + "' → '" + n + "'", 'info'); S.profile.name = n; patchProfile(S.profile); bus.emit('profile:change'); },
     setColor(c) { S.profile.color = c; patchProfile(S.profile); bus.emit('profile:change'); },
     async deleteSelf(secret) {
-      if (S.profile.protected && !(await verifySecret(secret))) throw new Error('Password is incorrect');
+      if (!(await verifySecret(secret))) throw new Error('Password is incorrect');
       const id = S.profile.id; const name = S.profile.name;
       clearTimeout(timer); S = null; store.use(null);
       await removeProfileData(id);

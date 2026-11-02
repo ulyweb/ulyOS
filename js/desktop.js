@@ -1049,6 +1049,7 @@
       widgets: ulyOS.Widgets.settingsSection({ row, sw }),
       shell: ulyOS.Shell.settingsSection({ row, sw, range, choose }),
       security: securitySection(),
+      sync: ulyOS.sync.settingsSection({ row }),
       about: aboutSection(),
       system: h('div', {},
         h('h3', { text: 'Storage' }),
@@ -1063,7 +1064,7 @@
         ulyOS.admin.enabled() ? row('Contact Admin', 'Send a message to the person who runs this site', h('button', { class: 'btn sm', html: icon('mailSend', 14) + ' Write message', onclick: () => ulyOS.admin.contact() })) : null,
         h('div', { class: 'set-desc', style: { marginTop: '16px' }, text: 'Version history, diagnostics and the privacy notes are in the About tab.' })),
     };
-    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['widgets', 'clock', 'Widgets'], ['shell', 'grid', 'Dock & Menu bar'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System'], ['about', 'info', 'About']];
+    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['widgets', 'clock', 'Widgets'], ['shell', 'grid', 'Dock & Menu bar'], ['security', 'shield', 'Security'], ['sync', 'refresh', 'Sync'], ['system', 'cpu', 'System'], ['about', 'info', 'About']];
     const navBtns = {};
     const content = h('div', { class: 'set-content' });
     function show(id) {

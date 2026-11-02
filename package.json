@@ -1,0 +1,14 @@
+{
+  "name": "ulyos",
+  "version": "1.9.0",
+  "private": true,
+  "description": "ulyOS — self-hosted browser OS (no build step; this file only exists for the test tooling)",
+  "scripts": {
+    "lint": "node tools/lint.js",
+    "build:apps": "node tools/build-apps.js",
+    "test": "npm run lint && playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

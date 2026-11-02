@@ -13,12 +13,30 @@ Open http://localhost:8080 in Chrome or Edge (use `localhost` or HTTPS, not `fil
 
 ## Profiles & security
 - Create or pick a profile on start-up. Each profile has its own desktop, settings, audit log, sandbox files and app data.
-- Optional password or PIN per profile. Everything the profile stores is encrypted at rest: PBKDF2-SHA256 (600,000 iterations) then AES-256-GCM, random salt per vault and random IV per write. The key is non-extractable and kept only in memory while signed in.
-- Lock screen, idle auto-lock, escalating delay after failed attempts, change or remove password, encrypted `.ulyprofile` backup and restore.
-- Files app: right-click a file, then **Encrypt…** or **Decrypt…** (`.uly` files, AES-256-GCM).
-- No recovery: a forgotten password cannot be reset. Keep an encrypted backup.
-- Sandbox files are isolated per profile but are not encrypted at rest unless you encrypt them.
-- GitHub Pages serves all `ulyweb.github.io` projects from one origin, so an unprotected profile is readable by other pages there. Use a password.
+- **A password is mandatory for every profile** (10+ characters, about 45 bits). Profiles from older versions that had no password, a PIN or a weak password must choose one at next sign-in.
+- **Key hierarchy**: a random 256-bit master key encrypts the vault and the sandbox files (AES-256-GCM, random IV per write). The master key is stored only *wrapped*: by a key from your password (PBKDF2-SHA256, 600,000 iterations, random salt) and by each passkey you add. Changing the password re-wraps the key; your data and passkeys are untouched.
+- **Passkey / fingerprint unlock** (Settings → Security): Touch ID, Windows Hello, a phone or a security key, using the WebAuthn PRF extension. The wrapping key comes from the authenticator, is 256 bits and never leaves it, so it cannot be brute-forced offline the way a PIN can. The password remains as the fallback. Needs HTTPS or localhost and a browser/authenticator with PRF support (recent Chrome, Edge, Safari 18+).
+- **Sandbox files are encrypted automatically** (`ULYSEC1` format) and decrypted on the fly in the Files app; existing files are encrypted at the next sign-in. Folders mounted from your computer stay ordinary files; files over 64 MB are stored as-is and you are told so.
+- Lock screen, idle auto-lock, escalating delay after failed attempts, change password, encrypted `.ulyprofile` backup and restore, per-file `.uly` encryption for sharing.
+- No recovery: a forgotten password cannot be reset (a passkey can still open the profile so you can set a new password). Keep an encrypted backup.
+- GitHub Pages serves all `ulyweb.github.io` projects from one origin; with a password-protected vault other pages there cannot read your data.
+
+## Sync between devices
+Settings → Sync. Settings, desktop layout, widgets and app data are packed into an encrypted bundle (AES-256-GCM, key from a **sync passphrase** you choose and keep only inside your encrypted vault) and merged per item: the newest change wins and deletions propagate (tombstones kept 90 days).
+- **File method**: Export a `.ulysync` file, move it however you like, Import on the other device.
+- **Automatic**: a secret GitHub gist plus a token with only the `gist` permission. The token stays in your encrypted vault and is sent only to `api.github.com`; the gist contains ciphertext only. Sync runs on sign-in and every 10 minutes if you enable it.
+- Not synced: sandbox files, the audit log, this device's sync settings. Limits: two devices changing the same item within seconds can overwrite each other (last write wins); after changes arrive ulyOS asks to reload and you sign in again.
+
+## Tests
+```bash
+npm ci
+npx playwright install chromium
+npm test        # lint + browser tests
+```
+`npm run lint` checks syntax, that no served page has `unsafe-inline`/`unsafe-eval` for scripts or inline handlers, that the converted apps are up to date, and scans for committed secrets. The Playwright tests (`tests/`) cover mandatory passwords and legacy upgrades, the vault format, passkeys (virtual authenticator), automatic file encryption, the strict CSP and all four bundled apps, two-device sync against a mocked gist, and a smoke test. They run on every push and pull request through `.github/workflows/test.yml`.
+
+## Editing the bundled apps
+`apps/*.html` and `apps/js/*` are generated from `tools/app-sources/*.html` by `node tools/build-apps.js` (it moves each app's inline script into a file, rewrites inline `on*=` handlers to `data-on-*` run by `js/app-bridge.js`, and adds a strict per-app Content-Security-Policy). Edit the source, run the tool, commit both.
 
 ## Apps
 | App | Source |
@@ -32,7 +50,7 @@ Open http://localhost:8080 in Chrome or Edge (use `localhost` or HTTPS, not `fil
 | Your own URL shortcuts | right-click the desktop → New URL shortcut (sites that forbid embedding open in a browser tab) |
 | Files, Task Manager, Settings | built in |
 
-The bundled apps run inside ulyOS windows with their browser storage redirected into the signed-in profile's encrypted vault.
+The bundled apps run inside ulyOS windows as their own documents (own strict policy) with their browser storage redirected into the signed-in profile's encrypted vault.
 
 ## Window manager
 Drag, resize, maximize, minimize, close, edge snap, z-order. Iframes get `pointer-events: none` during drags and resizes.
@@ -51,7 +69,7 @@ Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
 - **Widgets** (right-click the desktop → Add widget, or Settings → Widgets): Clock, Calendar, Notes, System monitor, Crypto prices, Timer. Drag to move, three sizes, saved in your encrypted profile. Crypto prices use the public CoinGecko API only while that widget exists.
 - **Clock**: 12-hour (AM/PM) or 24-hour (military), with or without seconds — Settings → Desktop.
 - **Contact Admin** (online build): in the profile screen footer, start menu, Help menu and Settings → System. Uses the same Google Apps Script relay as ulyweb/key. Only what you type is sent, and only after you press Send.
-- **Admin notification** (online build): the site admin is emailed when a profile is created — profile name, protected yes/no, the optional email you typed, time, site, language and time zone. Never passwords, PINs, keys, files or app data. This is disclosed on the profile screen and is disabled on localhost, file:// and in the offline build.
+- **Admin notification** (online build): the site admin is emailed when a profile is created — profile name, the optional email you typed, time, site, language and time zone. Never passwords, PINs, keys, files or app data. This is disclosed on the profile screen and is disabled on localhost, file:// and in the offline build.
 - **Offline version**: Settings → System, the Help menu, the start menu or the desktop right-click menu builds `ulyOS-offline-YYYYMMDD.zip` in the browser: the whole OS, start scripts for macOS/Linux/Windows, and a config with `OFFLINE: true` (no Contact Admin, no notification, nothing sent anywhere).
 
 ## Data widgets, defaults and mobile
@@ -73,3 +91,6 @@ Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
 
 ## 1.8.0 — security audit
 See [SECURITY.md](SECURITY.md) for the full model. Highlights: Content-Security-Policy and anti-clickjacking guard, sandboxed third-party iframes, password policy (10+ chars / ~45 bits; PINs 6–12 digits), range-checked key-derivation parameters, auto sign-out after a long lock, TrustVault's weak 32-bit hashes replaced with salted PBKDF2-SHA256, timestamped export file names, and a hardened contact relay in [docs/apps-script-relay.gs](docs/apps-script-relay.gs).
+
+## 1.9.0 — mandatory passwords, passkeys, encrypted files, strict CSP, sync, tests
+See "Profiles & security", "Sync between devices" and "Tests" above, and [SECURITY.md](SECURITY.md).

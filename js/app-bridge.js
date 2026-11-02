@@ -113,7 +113,7 @@
           if (typeof f !== 'function') throw new Error('not a function');
           return f.apply(thisArg, n.a.map(ev));
         }
-        case 'asg': { const o = ev(n.l.o), k = ev(n.l.n); if (BAD_MEMBER.has(k) || BAD_ASSIGN.test(String(k))) throw new Error('blocked assignment to ' + k); const v = ev(n.r); o[k] = v; return v; }
+        case 'asg': { const o = ev(n.l.o), k = ev(n.l.n); if (BAD_MEMBER.has(k) || BAD_ASSIGN.test(String(k))) throw new Error('blocked assignment to ' + k); if (typeof window !== 'undefined' && (o === window || o === document || o === window.location)) throw new Error('blocked assignment on window/document'); const v = ev(n.r); o[k] = v; return v; }
         case 'un': { const v = ev(n.e); return n.op === '!' ? !v : -v; }
         case 'cnd': return ev(n.c) ? ev(n.a) : ev(n.b);
         case 'bin': {

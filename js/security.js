@@ -195,10 +195,15 @@
      Vault runtime — a localStorage-shaped Map, persisted encrypted
      ------------------------------------------------------------------------ */
   let S = null;   // active session
+  const watchers = [];
   const vault = (ulyOS.vault = {
     get: (k) => (S && S.data.has(k) ? S.data.get(k) : null),
-    set(k, v) { if (S) { S.data.set(k, String(v)); schedule(); } },
-    remove(k) { if (S && S.data.delete(k)) schedule(); },
+    set(k, v) { if (S) { S.data.set(k, String(v)); schedule(); watchers.forEach((f) => f(k, false)); } },
+    remove(k) { if (S && S.data.delete(k)) { schedule(); watchers.forEach((f) => f(k, true)); } },
+    /** write without notifying watchers (used by sync when applying remote changes) */
+    setRaw(k, v) { if (S) { S.data.set(k, String(v)); schedule(); } },
+    removeRaw(k) { if (S && S.data.delete(k)) schedule(); },
+    watch(f) { watchers.push(f); },
     keys: () => (S ? [...S.data.keys()] : []),
     flush: () => flush(),
   });

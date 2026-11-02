@@ -3,8 +3,17 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.8.0';
+ulyOS.version = '1.9.0';
 ulyOS.CHANGELOG = [
+  { v: '1.9.0', d: '2026-11-02', n: [
+    'A password is now mandatory for every profile. The "no password" option and PINs are gone; profiles from earlier versions (no password, a PIN, or a weak password) must choose a strong password the next time they sign in',
+    'Passkey / fingerprint unlock (WebAuthn PRF): Touch ID, Windows Hello, a phone or a security key unlock the profile. The key comes from the authenticator, so it cannot be guessed offline the way a PIN can. The password stays as the fallback; add and remove passkeys in Settings → Security',
+    'New vault format: a random master key encrypts everything and is wrapped separately by the password and by each passkey, so changing the password no longer re-keys your data and passkeys keep working',
+    'Files in the sandbox are encrypted automatically (AES-256-GCM, key derived from the master key); existing files are encrypted at the next sign-in; files over 64 MB and folders mounted from your computer stay as normal files',
+    'Stricter Content-Security-Policy: no inline scripts or inline event handlers anywhere. The page scripts moved to files, and the bundled apps now open as their own documents with their own strict policy (tools/build-apps.js rebuilds them)',
+    'Multi-device sync (Settings → Sync): encrypted bundles merged per item, newest change wins, deletions propagate. Move a .ulysync file yourself or sync automatically through a secret GitHub gist with your own token',
+    'Automated tests (Playwright) and lint run on every push and pull request (.github/workflows/test.yml)',
+  ] },
   { v: '1.8.0', d: '2026-11-02', n: [
     'Security audit and hardening: Content-Security-Policy, anti-clickjacking frame guard, sandboxed iframes for third-party sites, range checks on key-derivation parameters read from storage or backups',
     'Password policy for profiles, backups and file encryption: 10+ characters and about 45 bits of entropy; PINs 6–12 digits and not trivially guessable',

@@ -18,14 +18,14 @@
 
   const isDevHost = () => /^(localhost|127\.|\[::1\]|0\.0\.0\.0)/.test(location.hostname) || location.protocol === 'file:';
   /** Contact form available (online build only). */
-  A.enabled = () => !cfg().OFFLINE && !!cfg().CONTACT_ENDPOINT && !!cfg().CONTACT_EMAIL;
+  A.enabled = () => !cfg().OFFLINE && !!cfg().CONTACT_ENDPOINT;
   /** Admin is emailed when a profile is created (never on localhost, file:// or the offline build). */
   A.notifyEnabled = () => A.enabled() && cfg().NOTIFY_ON_PROFILE !== false && (!isDevHost() || !!cfg().NOTIFY_ON_LOCALHOST);   // NOTIFY_ON_LOCALHOST: testing only
 
   function post(fields) {
     const fd = new FormData();
     Object.entries(fields).forEach(([k, v]) => fd.append(k, String(v)));
-    fd.append('email', cfg().CONTACT_EMAIL);   // the relay forwards to this address
+    if (cfg().CONTACT_EMAIL) fd.append('email', cfg().CONTACT_EMAIL);   // legacy relays read the recipient from here; a hardened relay hard-codes it and this can be left empty
     return fetch(cfg().CONTACT_ENDPOINT, { method: 'POST', body: fd, mode: 'no-cors', keepalive: true });
   }
 

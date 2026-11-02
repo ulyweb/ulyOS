@@ -106,6 +106,19 @@
     return { bits, label, level };
   }
 
+  /** Minimum quality for anything that protects data at rest. Returns a message, or null if acceptable. */
+  function policy(secret, cred) {
+    if (cred === 'pin') {
+      if (!/^\d{6,12}$/.test(secret)) return 'A PIN must be 6–12 digits';
+      if (/^(\d)\1+$/.test(secret) || '01234567890123456789'.includes(secret) || '98765432109876543210'.includes(secret)) return 'That PIN is too easy to guess';
+      return null;
+    }
+    if (secret.length < 10) return 'Use at least 10 characters (the generator makes strong ones)';
+    const st = strength(secret);
+    if (st.bits < 45) return 'Too easy to guess (about ' + st.bits + ' bits). Make it longer or more random, or use the generator';
+    return null;
+  }
+
   /* File encryption: "ULYENC1\0" | iter(u32) | salt(16) | iv(12) | AES-GCM( nameLen(u16) | name | data ) */
   const MAGIC = enc.encode('ULYENC1\0');
   async function encryptFile(data, password, name) {
@@ -168,7 +181,7 @@
   }, 5000);
   document.addEventListener('visibilitychange', () => { if (document.hidden && pref('purgeOnHide', true) && ulyOS.purge.holding()) ulyOS.purge.now('tab hidden'); });
 
-  ulyOS.crypto = { b64, rand, deriveKey, strength, generatePassword, generatePin, crackTime, encryptFile, decryptFile, ITER, hasCrypto };
+  ulyOS.crypto = { b64, rand, deriveKey, strength, policy, generatePassword, generatePin, crackTime, encryptFile, decryptFile, ITER, hasCrypto };
 
   /* ------------------------------------------------------------------------
      Profile registry (names/colors are public; data is in the vault)
@@ -217,6 +230,7 @@
     if (!raw) return { data: {}, key: null, salt: null, iter: 0 };
     const rec = JSON.parse(raw);
     if (!rec.enc) return { data: rec.data || {}, key: null, salt: null, iter: 0 };
+    if (!(rec.iter >= 100000 && rec.iter <= 5000000) || typeof rec.salt !== 'string' || typeof rec.iv !== 'string' || typeof rec.ct !== 'string') throw new Error('this profile’s stored data looks corrupted');
     const salt = b64.dec(rec.salt);
     const key = await deriveKey(secret, salt, rec.iter);
     let plain;
@@ -259,6 +273,7 @@
     if (!S || !S.profile.protected) return false;
     if (S.locked) return true;
     S.locked = true;
+    S.lockedAt = Date.now();
     ui.closeMenu();
     document.body.classList.add('locked');
     flush();
@@ -288,7 +303,12 @@
   function startIdle() {
     ['pointerdown', 'keydown', 'wheel', 'pointermove', 'touchstart'].forEach((e) => document.addEventListener(e, ping, { passive: true, capture: true }));
     idleTimer = setInterval(() => {
-      if (!S || S.locked || !S.profile.protected) return;
+      if (!S || !S.profile.protected) return;
+      if (S.locked) {   // locked for too long → throw the key away (full sign-out)
+        const lm = +(vault.get('ulyos.locksignout') ?? 15);
+        if (lm && Date.now() - S.lockedAt > lm * 60000) { ulyOS.audit('Signed out automatically after ' + lm + ' min locked — encryption key discarded from memory', 'warn'); signOut(); }
+        return;
+      }
       const mins = +(vault.get('ulyos.autolock') ?? 5);
       if (!mins) return;
       const a = document.activeElement;
@@ -363,6 +383,7 @@
     let obj;
     try { obj = JSON.parse(text); } catch { throw new Error('Not a valid backup file'); }
     if (obj.format !== 'ulyOS-profile') throw new Error('Not a ulyOS profile backup');
+    if (!(obj.iter >= 100000 && obj.iter <= 5000000) || typeof obj.salt !== 'string' || typeof obj.iv !== 'string' || typeof obj.ct !== 'string') throw new Error('Corrupted or unsupported backup file');
     const key = await deriveKey(pass, b64.dec(obj.salt), obj.iter);
     try { return { name: obj.profile?.name || 'Imported', color: obj.profile?.color, data: JSON.parse(dec.decode(await unseal(key, b64.dec(obj.iv), b64.dec(obj.ct), enc.encode('ulyOS-profile-backup-v1')))) }; }
     catch { throw new Error('Wrong password or corrupted backup'); }
@@ -413,7 +434,7 @@
       if (mode === 'pin') {
         const n = v.length, bits = Math.round(n * Math.log2(10));
         meter.firstChild.style.width = clamp(n / 10 * 100, 0, 100) + '%'; meter.dataset.l = n < 6 ? 1 : n < 8 ? 3 : 4;
-        info.textContent = n ? 'Length ' + n + ' · ~' + bits + ' bits · ' + (n < 8 ? 'weak — use 8+ digits or a password' : 'fair (digits only)') : '';
+        info.textContent = n ? 'Length ' + n + ' · ~' + bits + ' bits · ' + (n < 6 ? 'too short (min 6)' : 'digits only — convenient, but guessable offline; a password is far safer') : '';
         crack.textContent = n ? 'Offline brute-force at 10 billion guesses/s: ' + crackTime(bits) : '';
         return;
       }
@@ -633,9 +654,9 @@
       if (protect.checked) {
         if (!hasCrypto) { err.textContent = 'Encryption needs HTTPS or localhost'; return; }
         sec = pwc.value();
-        if (cred === 'pin' ? sec.length < 4 : sec.length < 8) { err.textContent = cred === 'pin' ? 'PIN must be at least 4 digits' : 'Password must be at least 8 characters'; return; }
+        const pe = policy(sec, cred);
+        if (pe) { err.textContent = pe; return; }
         if (sec !== pwc.confirm()) { err.textContent = 'Entries do not match'; return; }
-        if (cred === 'password' && strength(sec).level < 2) { err.textContent = 'That password is too weak'; return; }
       }
       busy = true; btn.disabled = true; btn.textContent = sec ? 'Encrypting…' : 'Creating…';
       await new Promise((r) => setTimeout(r, 30));
@@ -710,6 +731,8 @@
     exportProfile,
     vaultInfo: () => ({ iterations: S?.iter || 0, protected: !!S?.profile.protected, keys: vault.keys().length, bytes: (localStorage.getItem(vkey(S?.profile.id)) || '').length, failedAttempts: S ? 0 : 0 }),
     getAutoLock: () => +(vault.get('ulyos.autolock') ?? 5),
+    getLockSignOut: () => +(vault.get('ulyos.locksignout') ?? 15),
+    setLockSignOut: (m) => { vault.set('ulyos.locksignout', String(m)); ulyOS.audit('Sign out after lock set to ' + (m ? m + ' min' : 'never'), 'info'); },
     setAutoLock: (m) => { vault.set('ulyos.autolock', String(m)); ulyOS.audit('Auto-lock set to ' + (m ? m + ' min idle' : 'never'), 'info'); },
     rename(n) { n = n.trim(); if (!n) return; ulyOS.audit("Profile renamed '" + S.profile.name + "' → '" + n + "'", 'info'); S.profile.name = n; patchProfile(S.profile); bus.emit('profile:change'); },
     setColor(c) { S.profile.color = c; patchProfile(S.profile); bus.emit('profile:change'); },

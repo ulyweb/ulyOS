@@ -165,7 +165,9 @@
     const hh = d.getHours(), mm = pad2(d.getMinutes()), ss = seconds ? ':' + pad2(d.getSeconds()) : '';
     return h24 ? pad2(hh) + ':' + mm + ss : (hh % 12 || 12) + ':' + mm + ss + ' ' + (hh < 12 ? 'AM' : 'PM');
   };
-  ulyOS.util = { h, icon, ICONS, clamp, pad2, fmtTime, fmtClock, fmtBytes, fmtDuration, debounce, escapeHtml, store, dur, animOn, cssNum };
+  /** Filename-safe local timestamp: 20261102-093015 */
+  const stamp = (d = new Date()) => d.getFullYear() + pad2(d.getMonth() + 1) + pad2(d.getDate()) + '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + pad2(d.getSeconds());
+  ulyOS.util = { h, icon, ICONS, clamp, pad2, stamp, fmtTime, fmtClock, fmtBytes, fmtDuration, debounce, escapeHtml, store, dur, animOn, cssNum };
 
   const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -559,6 +561,9 @@
     const local = html != null;
     if (local) iframe.dataset.local = '1';
     iframe.setAttribute('allow', IFRAME_ALLOW);
+    /* Third-party sites run sandboxed: no top-level navigation (a framed site cannot redirect ulyOS itself),
+       no access to ulyOS. Bundled local apps (srcdoc) are trusted and unsandboxed. */
+    if (!local) iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock allow-presentation allow-storage-access-by-user-activation');
     iframe.setAttribute('allowfullscreen', '');
     const reload = () => {
       loader.classList.remove('done', 'slow');

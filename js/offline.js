@@ -97,8 +97,7 @@ Online version: https://ulyweb.github.io/ulyOS/
     const kill = ui.toast('Building the offline package…', { timeout: 60000 });
     try {
       const zip = await O.build();
-      const d = new Date();
-      const a = h('a', { href: URL.createObjectURL(new Blob([zip], { type: 'application/zip' })), download: 'ulyOS-offline-' + d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0') + '.zip' });
+      const a = h('a', { href: URL.createObjectURL(new Blob([zip], { type: 'application/zip' })), download: 'ulyOS-offline-' + ulyOS.util.stamp() + '.zip' });
       document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
       kill();
       ulyOS.audit('Offline package built and downloaded (' + (ulyOS.config.FILES || []).length + ' files, ' + fmtBytes(zip.length) + ')', 'ok');

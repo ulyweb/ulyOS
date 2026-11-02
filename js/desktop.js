@@ -721,12 +721,7 @@
     const swS = (key) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!settings[key], onchange: (e) => Settings.set(key, e.target.checked) }), h('i'));
     const credFieldFor = (pwc) => [{ name: 'type', label: 'Type', type: 'select', value: 'password', onchange: (v) => pwc.setMode(v), options: [{ value: 'password', label: 'Password (recommended)' }, { value: 'pin', label: 'PIN (digits only — weaker)' }] }];
     const secretFields = (pwc) => [{ name: 'pw', type: 'custom', node: pwc.el, get: pwc.value, focus: pwc.focus, dispose: pwc.dispose }, { name: 'pw2', type: 'custom', get: pwc.confirm }];
-    const validateNew = (v) => {
-      if (v.type === 'pin' ? !/^\d{4,12}$/.test(v.pw) : v.pw.length < 8) return v.type === 'pin' ? 'PIN must be 4–12 digits' : 'Use at least 8 characters';
-      if (v.pw !== v.pw2) return 'Entries do not match';
-      if (v.type === 'password' && ulyOS.crypto.strength(v.pw).level < 2) return 'That password is too weak';
-      return null;
-    };
+    const validateNew = (v) => ulyOS.crypto.policy(v.pw, v.type) || (v.pw !== v.pw2 ? 'Entries do not match' : null);
 
     function paint() {
       const p = sec.profile(), info = sec.vaultInfo(), prot = p.protected;
@@ -763,6 +758,7 @@
           try { await sec.removeSecret(v.old); ui.toast('Password removed', { type: 'warn' }); bus.emit('profile:change'); paint(); } catch (err) { ui.toast(err.message, { type: 'err' }); }
         } })) : null,
         row('Auto-lock after idle', prot ? 'Focus inside a cross-origin embedded site (e.g. Polotno) counts as activity — lock manually when you step away' : 'Requires a password', autoSel),
+        row('Sign out when locked for', prot ? 'After this long on the lock screen the encryption key is discarded from memory (full sign-out)' : 'Requires a password', h('select', { class: 'input sm', disabled: !prot, onchange: (e) => sec.setLockSignOut(+e.target.value) }, [[0, 'Never'], [5, '5 minutes'], [15, '15 minutes'], [30, '30 minutes'], [60, '1 hour']].map(([v, l]) => h('option', { value: v, text: l, selected: v === sec.getLockSignOut() })))),
         row('Lock now', null, h('button', { class: 'btn sm', html: icon('lock', 14) + ' Lock', onclick: lockNow })),
         h('h3', { text: 'Memory & clipboard' }),
         row('Purge memory now', 'Wipes every typed or generated password field and the clipboard — like “Purge memory” in System Vault', h('button', { class: 'btn sm danger', html: icon('trash', 14) + ' Purge now', onclick: () => ulyOS.purge.now('manual') })),
@@ -774,9 +770,9 @@
           const pwc = ui.passwordInput();
           const v = await ui.form({ title: 'Encrypt backup', message: 'Choose the password that will protect the backup file. Restoring it creates a profile protected with this password.',
             fields: secretFields(pwc), okText: 'Export',
-            validate: (x) => (x.pw.length < 8 ? 'Use at least 8 characters' : x.pw !== x.pw2 ? 'Entries do not match' : null) });
+            validate: (x) => ulyOS.crypto.policy(x.pw, 'password') || (x.pw !== x.pw2 ? 'Entries do not match' : null) });
           if (!v) return;
-          try { download(await sec.exportProfile(v.pw), p.name.replace(/[^\w.-]+/g, '_') + '-' + new Date().toISOString().slice(0, 10) + '.ulyprofile'); ulyOS.audit('Encrypted profile backup exported', 'ok'); ui.toast('Encrypted backup saved', { type: 'ok' }); }
+          try { download(await sec.exportProfile(v.pw), p.name.replace(/[^\w.-]+/g, '_') + '-' + ulyOS.util.stamp() + '.ulyprofile'); ulyOS.audit('Encrypted profile backup exported', 'ok'); ui.toast('Encrypted backup saved', { type: 'ok' }); }
           catch (err) { ui.toast('Export failed: ' + err.message, { type: 'err' }); }
         } })),
         row('Restore a backup', 'On the profile screen: sign out → Add profile → Import encrypted backup', h('button', { class: 'btn sm', text: 'Sign out…', onclick: () => sec.signOut() })),
@@ -858,7 +854,7 @@
       widgets: ulyOS.Widgets.exportList(),   // positions / sizes only — note text is private and never exported
     };
     if (String(settings.wallpaperCustom || '').startsWith('opfs:') && settings.wallpaper === 'custom') data.settings.wallpaper = 'void';
-    const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'ulyOS-settings-' + (prof ? prof.name.replace(/[^\w.-]+/g, '_') : 'profile') + '-' + new Date().toISOString().slice(0, 10) + '.json' });
+    const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'ulyOS-settings-' + (prof ? prof.name.replace(/[^\w.-]+/g, '_') : 'profile') + '-' + ulyOS.util.stamp() + '.json' });
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     ulyOS.audit('Settings exported (' + Object.keys(data.settings).length + ' options, ' + data.icons.length + ' desktop icons)', 'ok');
     ui.toast('Settings exported — import the file on another device to copy this setup', { type: 'ok', timeout: 4500 });

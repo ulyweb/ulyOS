@@ -3,8 +3,16 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.7.0';
+ulyOS.version = '1.8.0';
 ulyOS.CHANGELOG = [
+  { v: '1.8.0', d: '2026-11-02', n: [
+    'Security audit and hardening: Content-Security-Policy, anti-clickjacking frame guard, sandboxed iframes for third-party sites, range checks on key-derivation parameters read from storage or backups',
+    'Password policy for profiles, backups and file encryption: 10+ characters and about 45 bits of entropy; PINs 6–12 digits and not trivially guessable',
+    'TrustVault: replaced the unsalted 32-bit djb2 hashes (beneficiary password, vault passcode) with salted PBKDF2-SHA256 (120,000 iterations); old hashes upgrade automatically on next use; Math.random salt replaced by the CSPRNG',
+    'Auto sign-out after the screen has been locked for a set time (default 15 min) so the key is discarded from memory',
+    'Exports (settings, profile backup, offline package) now include date and time in the file name',
+    'docs/apps-script-relay.gs (hardened contact relay) and SECURITY.md added; contact recipient address can now live only inside the relay',
+  ] },
   { v: '1.7.0', d: '2026-11-02', n: [
     'Purge memory: Purge button on every password generator, automatic purge when idle or when the tab is hidden, "Purge memory now" in Settings → Security and the logo menu, clipboard auto-clear',
     'Effects panel like System Vault: aurora intensity, 3D tilt, FX animation, toolbar glow, icon scale, CRT scanlines, glass blur, panel fill, depth, sound effects and volume, Reset FX to defaults, Undo changes',

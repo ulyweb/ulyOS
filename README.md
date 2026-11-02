@@ -70,3 +70,6 @@ Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
 - **Clock**: 12-hour AM/PM is the default.
 - **Nature & landscapes**: 12 procedurally drawn SVG wallpapers (no downloads, work offline), also in the desktop right-click → Wallpaper menu and in Random / Surprise me.
 - **About**: version, diagnostics (with Copy diagnostics) and the complete version history (`js/version.js` — add an entry for every release).
+
+## 1.8.0 — security audit
+See [SECURITY.md](SECURITY.md) for the full model. Highlights: Content-Security-Policy and anti-clickjacking guard, sandboxed third-party iframes, password policy (10+ chars / ~45 bits; PINs 6–12 digits), range-checked key-derivation parameters, auto sign-out after a long lock, TrustVault's weak 32-bit hashes replaced with salted PBKDF2-SHA256, timestamped export file names, and a hardened contact relay in [docs/apps-script-relay.gs](docs/apps-script-relay.gs).

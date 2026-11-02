@@ -751,7 +751,7 @@
         title: 'Encrypt ' + (picks.length === 1 ? "'" + picks[0].name + "'" : picks.length + ' files'),
         message: 'Creates a .uly file protected with AES-256-GCM (PBKDF2-SHA256, 600,000 iterations). The original is kept. There is no recovery if you forget the password.',
         fields: [{ name: 'pw', type: 'custom', node: pwc.el, get: pwc.value, focus: pwc.focus, dispose: pwc.dispose }, { name: 'pw2', type: 'custom', get: pwc.confirm }], okText: 'Encrypt',
-        validate: (x) => (x.pw.length < 8 ? 'Use at least 8 characters' : x.pw !== x.pw2 ? 'Passwords do not match' : null),
+        validate: (x) => ulyOS.crypto.policy(x.pw, 'password') || (x.pw !== x.pw2 ? 'Passwords do not match' : null),
       });
       if (!v) return;
       try {

@@ -467,36 +467,70 @@
   W.types = TYPES;
 
   /* ---------------- instances ---------------- */
+  const MINW = 168, MINH = 120, MAXW = 900, MAXH = 900;
+  /** width/height of an instance: free-form if the user resized it, else the preset */
+  const dim = (i) => [i.w || SIZES[i.size][0], i.h || SIZES[i.size][1]];
+  const sizeOf = (r) => (Number.isFinite(+r.w) && Number.isFinite(+r.h) && r.w && r.h ? { w: clamp(Math.round(+r.w), MINW, MAXW), h: clamp(Math.round(+r.h), MINH, MAXH) } : {});
+  const bucket = (w, hh) => (hh >= 440 ? 'x' : hh >= 300 ? 'l' : w >= 300 ? 'm' : 's');
   const uid = () => 'wg_' + Math.random().toString(36).slice(2, 9);
   const area = () => ({ w: layer ? layer.clientWidth : window.innerWidth, h: layer ? layer.clientHeight : window.innerHeight });
   const cfgOf = (i) => { const o = {}; ['tokens', 'watch', 'leagues', 'sources', 'team', 'tab'].forEach((k) => { if (i[k] !== undefined) o[k] = i[k]; }); return o; };
-  const save = debounce(() => store.set('ulyos.widgets', { v: 1, list: insts.map((i) => ({ id: i.id, type: i.type, size: i.size, x: i.x, y: i.y, ...cfgOf(i), ...(i.type === 'notes' ? { text: i.text } : {}) })) }), 200);
+  const save = debounce(() => store.set('ulyos.widgets', { v: 1, list: insts.map((i) => ({ id: i.id, type: i.type, size: i.size, x: i.x, y: i.y, ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i), ...(i.type === 'notes' ? { text: i.text } : {}) })) }), 200);
 
   /** First free rectangle on the right, scanning leftwards — never on top of desktop icons or other widgets. */
-  function freeSpot(size) {
-    const [w, hh] = SIZES[size], a = area();
+  const iconBlocks = () => {
     const cw = parseFloat(css('--cell-w')) || 100, ch = parseFloat(css('--cell-h')) || 110, pad = (ulyOS.Desktop && ulyOS.Desktop.pad) || 16;
-    const blocks = [
-      ...((ulyOS.Desktop && ulyOS.Desktop.icons) || []).filter((i) => i.col != null).map((i) => ({ x: pad + i.col * cw, y: pad + i.row * ch, w: cw, h: ch })),
-      ...insts.map((i) => ({ x: i.x, y: i.y, w: SIZES[i.size][0], h: SIZES[i.size][1] })),
-    ];
-    const hit = (x, y) => blocks.some((b) => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + hh > b.y);
+    return ((ulyOS.Desktop && ulyOS.Desktop.icons) || []).filter((i) => i.col != null).map((i) => ({ x: pad + i.col * cw, y: pad + i.row * ch, w: cw, h: ch }));
+  };
+  const overlaps = (blocks, x, y, w, hh) => blocks.some((b) => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + hh > b.y);
+  /** First free rectangle on the right, scanning leftwards — never on top of desktop icons or other widgets. */
+  function findSpot(w, hh, blocks) {
+    const a = area();
     for (let x = a.w - w - 24; x >= 0; x -= 24) {
-      for (let y = 64; y + hh <= a.h; y += 24) { if (!hit(x, y)) return { x: Math.round(x / 8) * 8, y: Math.round(y / 8) * 8 }; }
+      for (let y = 64; y + hh <= a.h; y += 24) { if (!overlaps(blocks, x, y, w, hh)) return { x: Math.round(x / 8) * 8, y: Math.round(y / 8) * 8 }; }
     }
-    return { x: clamp(a.w - w - 24, 0, a.w), y: 64 + (insts.length % 5) * 24 };   // screen is full: stack with an offset
+    return null;
+  }
+  function freeSpot(size) {
+    const [w, hh] = SIZES[size];
+    const blocks = [...iconBlocks(), ...insts.map((i) => { const [iw, ih] = dim(i); return { x: i.x, y: i.y, w: iw, h: ih }; })];
+    return findSpot(w, hh, blocks) || { x: clamp(area().w - w - 24, 0, area().w), y: 64 + (insts.length % 5) * 24 };   // screen is full: stack with an offset
   }
 
   function mount(inst) {
     const T = TYPES[inst.type];
-    const [w, hh] = SIZES[inst.size];
+    const [w, hh] = dim(inst);
     const body = h('div', { class: 'w-body sz-' + inst.size });
     const ctx = { save: (patch) => { Object.assign(inst, patch); save(); } };
     const head = h('div', { class: 'w-head' }, h('span', { class: 'w-ico', html: icon(T.ico, 13) }), h('span', { class: 'w-title', text: T.name }),
       T.speak && ulyOS.Speech && ulyOS.Speech.supported ? h('button', { class: 'w-speak', 'aria-label': 'Read aloud', title: 'Read aloud', html: icon('volume', 12), onclick: () => ulyOS.Speech.speak(T.speak(inst)) }) : null,
       T.config ? h('button', { class: 'w-x w-cfg', 'aria-label': 'Configure widget', title: 'Configure', html: icon('settings', 12), onclick: () => W.configure(inst.id) }) : null,
       h('button', { class: 'w-x', 'aria-label': 'Remove widget', title: 'Remove', html: icon('x', 12), onclick: () => W.remove(inst.id) }));
-    const el = h('section', { class: 'wgt wgt-' + inst.type, dataset: { id: inst.id }, style: { width: w + 'px', height: hh + 'px', left: inst.x + 'px', top: inst.y + 'px' } }, head, body);
+    const grip = h('div', { class: 'w-rz w-nodrag', title: 'Drag to resize', 'aria-label': 'Resize widget' });
+    const el = h('section', { class: 'wgt wgt-' + inst.type, dataset: { id: inst.id }, style: { width: w + 'px', height: hh + 'px', left: inst.x + 'px', top: inst.y + 'px' } }, head, body, grip);
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || document.body.classList.contains('compact')) return;
+      e.preventDefault(); e.stopPropagation();
+      const sx = e.clientX, sy = e.clientY, [ow, oh] = dim(inst);
+      try { grip.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+      el.classList.add('resizing'); WM.setIframesInert(true);
+      const mv = (ev) => {
+        const a = area();
+        const nw = clamp(Math.round((ow + ev.clientX - sx) / 8) * 8, MINW, Math.min(MAXW, a.w)), nh = clamp(Math.round((oh + ev.clientY - sy) / 8) * 8, MINH, Math.min(MAXH, a.h));
+        inst.w = nw; inst.h = nh; el.style.width = nw + 'px'; el.style.height = nh + 'px';
+        // at the screen edge the widget grows toward the middle instead of stopping
+        if (inst.x + nw > a.w) { inst.x = Math.max(0, a.w - nw); el.style.left = inst.x + 'px'; }
+        if (inst.y + nh > a.h) { inst.y = Math.max(0, a.h - nh); el.style.top = inst.y + 'px'; }
+        const b = bucket(nw, nh);
+        if (b !== inst.size) { inst.size = b; body.className = 'w-body sz-' + b; live.get(inst.id)?.update?.(); }
+      };
+      const up = () => {
+        grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
+        try { grip.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
+        el.classList.remove('resizing'); WM.setIframesInert(false); save(); relayout();
+      };
+      grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+    });
     layer.append(el);
     const api = T.build(body, inst, ctx) || {};
     api.update?.();
@@ -518,7 +552,7 @@
       const up = () => {
         el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
         try { el.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-        if (moved) { el.classList.remove('dragging'); WM.setIframesInert(false); save(); }
+        if (moved) { el.classList.remove('dragging'); WM.setIframesInert(false); save(); relayout(); }
       };
       el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     });
@@ -550,7 +584,7 @@
   W.setSize = function (id, size) {
     const inst = insts.find((x) => x.id === id);
     if (!inst || !SIZES[size] || inst.size === size) return;
-    unmount(id); inst.size = size;
+    unmount(id); inst.size = size; delete inst.w; delete inst.h;
     const a = area(), [w, hh] = SIZES[size];
     inst.x = clamp(inst.x, 0, Math.max(0, a.w - w)); inst.y = clamp(inst.y, 0, Math.max(0, a.h - hh));
     mount(inst); save();
@@ -608,29 +642,56 @@
       list,
       h('div', { class: 'set-desc', text: 'Drag a widget to move it; right-click for size and removal. Crypto prices call the public CoinGecko API (only while that widget exists).' }));
   };
-  W.exportList = () => insts.map((i) => ({ type: i.type, size: i.size, x: i.x, y: i.y, ...cfgOf(i) }));
+  W.exportList = () => insts.map((i) => ({ type: i.type, size: i.size, x: i.x, y: i.y, ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i) }));
   W.importList = function (list) {
     if (!Array.isArray(list)) return;
     W.clear();
     list.slice(0, MAX).forEach((r) => {
       if (!r || !TYPES[r.type] || !SIZES[r.size]) return;
-      const inst = { id: uid(), type: r.type, size: r.size, x: clamp(Math.round(+r.x) || 0, 0, 4000), y: clamp(Math.round(+r.y) || 0, 0, 4000), ...cleanCfg(r) };
+      const inst = { id: uid(), type: r.type, size: r.size, x: clamp(Math.round(+r.x) || 0, 0, 4000), y: clamp(Math.round(+r.y) || 0, 0, 4000), ...sizeOf(r), ...cleanCfg(r) };
       insts.push(inst); mount(inst);
     });
     relayout(); save(); bus.emit('widgets:change');
   };
 
   /* ---------------- layout + lifecycle ---------------- */
+  /** Fit every widget into the current desktop area without overlapping icons or each other.
+      The position the user chose (inst.x / inst.y) is kept as the preference; a widget is only
+      shown elsewhere while its preferred spot does not fit, and returns when the window grows back. */
   function relayout() {
+    if (!layer || document.body.classList.contains('compact')) return;
     const a = area();
-    insts.forEach((i) => {
-      const l = live.get(i.id);
-      if (!l) return;
-      const [w, hh] = SIZES[i.size];
-      i.x = clamp(i.x, 0, Math.max(0, a.w - w)); i.y = clamp(i.y, 0, Math.max(0, a.h - hh));
-      l.el.style.left = i.x + 'px'; l.el.style.top = i.y + 'px';
-    });
+    const order = [...insts].sort((p, q) => p.y - q.y || p.x - q.x).filter((i) => live.get(i.id));
+    /** Place everyone. Widgets whose chosen spot is free keep it at full size; the others move, shrunk by factor k
+        (0 = minimum size). Returns null if some widget has nowhere to go. */
+    const plan = (k, cascade) => {
+      const blocks = iconBlocks(), out = [];
+      let n = 0;
+      for (const i of order) {
+        let [w, hh] = dim(i);
+        w = Math.min(w, Math.max(MINW, a.w - 16)); hh = Math.min(hh, Math.max(MINH, a.h - 72));   // never larger than the screen
+        let x = clamp(i.x, 0, Math.max(0, a.w - w)), y = clamp(i.y, 0, Math.max(0, a.h - hh));
+        if (overlaps(blocks, x, y, w, hh)) {
+          const tw = k ? Math.max(MINW, Math.round(w * k)) : MINW, th = k ? Math.max(MINH, Math.round(hh * k)) : MINH;
+          const spot = findSpot(tw, th, blocks) || findSpot(MINW, MINH, blocks);
+          if (spot) { x = spot.x; y = spot.y; if (spot && findSpot(tw, th, blocks)) { w = tw; hh = th; } else { w = MINW; hh = MINH; } }
+          else if (!cascade) return null;
+          else { w = MINW; hh = MINH; x = clamp(a.w - w - 8 - (n % 4) * 28, 0, a.w); y = clamp(64 + (n % 6) * 28, 0, Math.max(0, a.h - hh)); n++; }
+        }
+        blocks.push({ x, y, w, h: hh }); out.push([i, x, y, w, hh]);
+      }
+      return out;
+    };
+    let result = null;
+    for (const k of [1, 0.85, 0.7, 0.55, 0]) { result = plan(k, false); if (result) break; }
+    if (!result) result = plan(0, true);   // truly full: the rest cascade
+    for (const [i, x, y, w, hh] of result) {
+      const el = live.get(i.id).el;
+      el.style.width = w + 'px'; el.style.height = hh + 'px'; el.style.left = x + 'px'; el.style.top = y + 'px';
+    }
   }
+  let rt = 0;
+  const relayoutSoon = () => { clearTimeout(rt); rt = setTimeout(relayout, 140); };   // after the icon grid has reflowed
   /** Phone layout: widgets live in a full-screen panel opened from the dock instead of floating over the icons. */
   W.togglePanel = (on) => {
     const open = on === undefined ? !document.body.classList.contains('widgets-open') : on;
@@ -650,14 +711,15 @@
     if (saved && Array.isArray(saved.list)) {
       saved.list.slice(0, MAX).forEach((r) => {
         if (!r || !TYPES[r.type] || !SIZES[r.size]) return;
-        const inst = { id: typeof r.id === 'string' ? r.id : uid(), type: r.type, size: r.size, x: +r.x || 0, y: +r.y || 0, ...cleanCfg(r), ...(typeof r.text === 'string' ? { text: r.text.slice(0, 5000) } : {}) };
+        const inst = { id: typeof r.id === 'string' ? r.id : uid(), type: r.type, size: r.size, x: +r.x || 0, y: +r.y || 0, ...sizeOf(r), ...cleanCfg(r), ...(typeof r.text === 'string' ? { text: r.text.slice(0, 5000) } : {}) };
         insts.push(inst); mount(inst);
       });
       relayout();
     }
     W.applyVisibility();
     setInterval(() => { if (!document.hidden) live.forEach((l) => { try { l.update?.(); } catch { /* ignore */ } }); }, 1000);
-    window.addEventListener('resize', relayout);
-    bus.on('settings:change', () => { W.applyVisibility(); relayout(); live.forEach((l) => l.update?.()); });
+    window.addEventListener('resize', relayoutSoon);
+    bus.on('settings:change', () => { W.applyVisibility(); relayoutSoon(); live.forEach((l) => l.update?.()); });
+    bus.on('desktop:layout', relayoutSoon); bus.on('widgets:change', relayoutSoon);
   };
 })();

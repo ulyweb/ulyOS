@@ -3,8 +3,15 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.10.0';
+ulyOS.version = '1.11.0';
 ulyOS.CHANGELOG = [
+  { v: '1.11.0', d: '2026-11-02', n: [
+    'Guided tour: a welcome screen after sign-in (first time, or every time if you switch it on) and a 13-step spotlight tour of the desktop, dock, Files, widgets, Speak, settings, security, sync and offline use. Replay from Help, the ulyOS logo menu or Settings → About',
+    'Widgets can be resized freely by dragging the bottom-right corner, and they repack themselves (shrinking if needed) whenever the window changes size, so they no longer overlap icons or each other; they return to your chosen spots when there is room again',
+    'Speak can record speech to a .wav or .mp3 file (records the tab audio, encoded on your device)',
+    'Offline build: a new local server (server.py, this computer only) that quits from the profile menu or Settings → System, and stops by itself when you close the tab; start scripts no longer leave a server running',
+    'Help → About ulyOS and the logo menu now show the version, build (online / offline) and what is new; the About tab shows the build too',
+  ] },
   { v: '1.10.0', d: '2026-11-02', n: [
     'Speak: a text-to-speech app (desktop icon, start menu) — type or paste text, or turn on "speak each word as I type"; choose voice, speed, pitch and volume. The Notes widget has a read-aloud button',
     'Text: choose the interface font (8 families), size (10–22 px), weight and italic in Settings → Appearance',

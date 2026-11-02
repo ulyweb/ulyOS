@@ -18,7 +18,7 @@
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
     cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '12', widgetsVisible: true,
-    cursorStyle: 'neon', cursorSize: 100, cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
+    cursorStyle: 'neon', cursorSize: 100, welcomeAlways: false, cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // Telemetry FX (Settings → Effects)
     fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, depth: 50, sfx: true, sfxVolume: 35,
     // memory hygiene (Settings → Security)
@@ -398,6 +398,7 @@
     });
     Desktop.icons.forEach(placeEl);
     saveIcons();
+    bus.emit('desktop:layout');
   };
 
   Desktop.render = function (animateIn) {
@@ -951,7 +952,7 @@
       h('ul', {}, c.n.map((x) => h('li', { text: x })))));
     wrap.append(
       h('div', { class: 'about-hero' }, h('div', { class: 'about-logo', html: '<svg viewBox="0 0 80 80" width="44" height="44"><circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="40" cy="40" r="5" fill="currentColor"/></svg>' }),
-        h('div', {}, h('div', { class: 'about-name', html: 'uly<span>OS</span>' }), h('div', { class: 'mono about-ver', text: 'version ' + ulyOS.version + ' · ' + ulyOS.CHANGELOG[0].d }))),
+        h('div', {}, h('div', { class: 'about-name', html: 'uly<span>OS</span>' }), h('div', { class: 'mono about-ver', text: 'version ' + ulyOS.version + ' · ' + ulyOS.CHANGELOG[0].d + ' · ' + (ulyOS.config.OFFLINE ? 'offline build' : 'online build') }), h('div', { class: 'btn-row', style: { marginTop: '8px' } }, h('button', { class: 'btn sm', text: '🧭 Guided tour', onclick: () => ulyOS.tour.start() }), h('button', { class: 'btn sm', text: 'Welcome screen', onclick: () => ulyOS.tour.welcome(true) })))),
       h('p', { class: 'set-desc about-p', text: 'A private, browser-based operating system in vanilla HTML, CSS and JavaScript — no frameworks, no build step, no server. Everything runs on your device.' }),
       h('h3', { text: 'Security model' }),
       h('p', { class: 'set-desc about-p', text: 'Each profile’s vault (settings, layout, audit log, app data, notes) is encrypted with AES-256-GCM using a key derived by PBKDF2-SHA256 (600,000 iterations). The key is non-extractable and lives only in memory while you are signed in. There is no recovery: a forgotten password cannot be reset, so keep an encrypted backup. Typed or generated secrets can be wiped at any time with Purge memory.' }),
@@ -1133,6 +1134,9 @@
         row('Reset settings', 'Restore appearance and behaviour defaults', h('button', { class: 'btn sm', text: 'Reset', onclick: async () => {
           if (await ui.confirm({ title: 'Reset settings?', message: 'Appearance and behaviour return to defaults. Files are not touched.', okText: 'Reset' })) { Settings.reset(); ulyOS.audit('Settings reset to defaults', 'warn'); show('appearance'); paintTiles(); paintSw(); }
         } })),
+        ulyOS.offline && ulyOS.offline.canQuit() ? row('Quit ulyOS', 'Saves everything, stops the local Python server and ends the session — then close the tab', h('button', { class: 'btn sm danger', text: 'Quit…', onclick: () => ulyOS.offline.quit() })) : null,
+        row('Guided tour', 'A short walkthrough of what ulyOS can do', h('button', { class: 'btn sm', text: 'Start tour', onclick: () => ulyOS.tour.start() })),
+        row('Show the welcome screen on every sign-in', 'Off: it appears only the first time (replay it any time from Help)', sw('welcomeAlways')),
         row('Restart ulyOS', 'Close all windows and replay the boot sequence', h('button', { class: 'btn sm', text: 'Restart', onclick: restart })),
         ulyOS.config.OFFLINE ? null : row('Offline version', 'Download a .zip you can run without the internet (no admin contact, nothing is sent anywhere)', h('button', { class: 'btn sm', html: icon('download', 14) + ' Download .zip', onclick: () => ulyOS.offline.download() })),
         ulyOS.admin.enabled() ? row('Contact Admin', 'Send a message to the person who runs this site', h('button', { class: 'btn sm', html: icon('mailSend', 14) + ' Write message', onclick: () => ulyOS.admin.contact() })) : null,

@@ -14,7 +14,7 @@ ulyOS.config = {
   /* Every file in the offline package (paths relative to index.html). */
   FILES: [
     'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
-    'js/guard.js', 'js/config.js', 'js/version.js', 'js/window.js', 'js/security.js', 'js/admin.js', 'js/offline.js', 'js/telemetry.js', 'js/filesystem.js', 'js/landscapes.js', 'js/fx.js', 'js/desktop.js', 'js/shell.js', 'js/speech.js', 'js/widgets.js', 'js/sync.js', 'js/sw-register.js', 'js/app-bridge.js', 'js/app-shim.js',
+    'js/guard.js', 'js/config.js', 'js/version.js', 'js/window.js', 'js/security.js', 'js/admin.js', 'js/offline.js', 'js/telemetry.js', 'js/filesystem.js', 'js/landscapes.js', 'js/fx.js', 'js/desktop.js', 'js/shell.js', 'js/speech.js', 'js/widgets.js', 'js/sync.js', 'js/tour.js', 'vendor/lamejs.min.js', 'js/sw-register.js', 'js/app-bridge.js', 'js/app-shim.js',
     'apps/trustvault.html', 'apps/qrseal.html', 'apps/systemvault.html', 'apps/cryptocompass.html',
   'apps/js/trustvault.js', 'apps/js/trustvault.handlers.js',
     'apps/js/systemvault.js', 'apps/js/systemvault.handlers.js', 'apps/js/cryptocompass.js', 'apps/js/cryptocompass.handlers.js',

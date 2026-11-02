@@ -143,6 +143,7 @@
         { label: 'Security settings…', icon: 'shield', action: () => API().openSettings('security') },
         { separator: true },
         { label: 'Switch profile / sign out', icon: 'power', danger: true, action: () => ulyOS.security.signOut() },
+        ...(ulyOS.offline && ulyOS.offline.canQuit() ? [{ label: 'Quit ulyOS (stop server)', icon: 'power', danger: true, action: () => ulyOS.offline.quit() }] : []),
       ]);
     });
   }
@@ -373,17 +374,24 @@
       btn.addEventListener('pointerenter', () => { if (openBtn && openBtn !== btn) openMenu(btn, items()); });
       left.append(btn);
     };
-    const about = () => ui.alert({
-      title: 'ulyOS', okText: 'Close',
-      message: 'Browser-based OS in vanilla HTML, CSS and JavaScript.\nProfile: ' + (ulyOS.security.profile()?.name || '') + ' · vault ' + (ulyOS.security.isProtected() ? 'encrypted (AES-256-GCM)' : 'not encrypted') + '\nhttps://github.com/ulyweb/ulyOS',
-    });
+    const about = async () => {
+      const latest = ulyOS.CHANGELOG[0];
+      const r = await ui.choose({
+        title: 'ulyOS ' + ulyOS.version,
+        message: 'Version ' + ulyOS.version + ' (' + latest.d + ') · ' + (ulyOS.config.OFFLINE ? 'offline build' : 'online build') + '\n' +
+          'Browser-based OS in vanilla HTML, CSS and JavaScript.\nProfile: ' + (ulyOS.security.profile()?.name || '') + ' · vault encrypted (AES-256-GCM)\n\nNewest: ' + latest.n[0] + '\n\nhttps://github.com/ulyweb/ulyOS',
+        choices: [{ label: 'Close', value: null }, { label: 'Guided tour', value: 'tour' }, { label: 'Version history', value: 'history', primary: true }],
+      });
+      if (r === 'history') API().openSettings('about'); else if (r === 'tour') ulyOS.tour.start();
+    };
     const logo = h('button', { class: 'mb-btn logo', 'aria-label': 'ulyOS menu', html: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none"/></svg>' });
     const appBtn = h('button', { class: 'mb-btn app', text: 'ulyOS' });
     const setApp = () => { const w = WM.focused(); appBtn.textContent = w ? w.title.replace(/^● /, '') : 'ulyOS'; };
     ['window:focus', 'window:title', 'window:close', 'window:minimize'].forEach((e) => bus.on(e, setApp));
 
     add(logo, () => [
-      { label: 'About ulyOS', icon: 'info', action: about }, { separator: true },
+      { label: 'About ulyOS ' + ulyOS.version, icon: 'info', action: about },
+      { label: 'Guided tour', icon: 'compass', action: () => ulyOS.tour.start() }, { separator: true },
       { label: 'System Settings…', icon: 'settings', action: () => API().openSettings() },
       { label: 'Task Manager', icon: 'activity', action: () => API().SYS_APPS.taskmgr.open() }, { separator: true },
       { label: 'Lock Screen', icon: 'lock', action: API().lockNow },
@@ -422,12 +430,15 @@
       ];
     });
     add(h('button', { class: 'mb-btn', text: 'Help' }), () => [
+      { label: 'Guided tour', icon: 'compass', action: () => ulyOS.tour.start() },
+      { label: 'Welcome screen', icon: 'home', action: () => ulyOS.tour.welcome(true) },
+      { separator: true },
       { label: 'ulyOS on GitHub', icon: 'external', action: () => window.open('https://github.com/ulyweb/ulyOS', '_blank', 'noopener,noreferrer') },
       { label: 'Security settings…', icon: 'shield', action: () => API().openSettings('security') },
       ...(ulyOS.config.OFFLINE ? [] : [{ label: 'Download offline version…', icon: 'download', action: () => ulyOS.offline.download() }]),
       ...(ulyOS.admin && ulyOS.admin.enabled() ? [{ label: 'Contact Admin…', icon: 'mailSend', action: () => ulyOS.admin.contact() }] : []),
       { separator: true },
-      { label: 'About ulyOS', icon: 'info', action: about },
+      { label: 'About ulyOS ' + ulyOS.version, icon: 'info', action: about },
     ]);
     setApp();
   }

@@ -27,6 +27,12 @@ Settings → Sync. Settings, desktop layout, widgets and app data are packed int
 - **Automatic**: a secret GitHub gist plus a token with only the `gist` permission. The token stays in your encrypted vault and is sent only to `api.github.com`; the gist contains ciphertext only. Sync runs on sign-in and every 10 minutes if you enable it.
 - Not synced: sandbox files, the audit log, this device's sync settings. Limits: two devices changing the same item within seconds can overwrite each other (last write wins); after changes arrive ulyOS asks to reload and you sign in again.
 
+## Guided tour, widgets, speech and the offline build
+- **Welcome screen and guided tour** appear after your first sign-in. Replay them from Help → Guided tour / Welcome screen, the ulyOS logo menu or Settings → About; Settings → System can show the welcome screen on every sign-in.
+- **Widgets** resize by dragging the bottom-right corner (or right-click → Size for presets) and re-pack themselves when the browser window changes size.
+- **Speak** reads text aloud (optionally each word as you type) and can save speech as `.wav` or `.mp3`: browsers do not expose the audio of their built-in voices, so ulyOS records the tab's audio (choose “This tab” and “Share tab audio” in the browser prompt) and encodes it locally. Some cloud voices play outside the page and cannot be captured — pick a “local” voice. MP3 uses the LGPL `lamejs` encoder in `vendor/`.
+- **Offline build**: run the start script (`server.py` serves only this computer). Stop it with profile menu → **Quit ulyOS (stop server)**, Settings → System → Quit, or just close the tab (the server exits within a minute). A web page cannot close the browser itself.
+
 ## Tests
 ```bash
 npm ci

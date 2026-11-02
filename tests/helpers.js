@@ -11,7 +11,7 @@ async function hermetic(context, extra) {
 }
 
 /** Creates a profile through the real UI and waits for the desktop. */
-async function createProfile(page, name = 'Tester', pw = PW) {
+async function createProfile(page, name = 'Tester', pw = PW, opts = {}) {
   await page.goto('/index.html');
   await page.waitForSelector('.auth-form');
   await page.fill('input[placeholder="Profile name"]', name);
@@ -19,6 +19,8 @@ async function createProfile(page, name = 'Tester', pw = PW) {
   await page.fill('.pwc input[placeholder="Confirm"]', pw);
   await page.click('button:has-text("Create profile")');
   await page.waitForSelector('.desk-icon', { timeout: 45000 });
+  // the welcome screen would sit on top of the desktop; tests that want it pass { tour: true }
+  if (!opts.tour) await page.evaluate(() => ulyOS.vault.set('ulyos.tour.seen', '1'));
 }
 
 /** Collects page errors and CSP violations. */

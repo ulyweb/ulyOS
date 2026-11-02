@@ -847,6 +847,7 @@
       const close = (val) => {
         if (done) return;
         done = true;
+        try { const m = back.firstElementChild; if (m && m._dispose) m._dispose(); } catch { /* ignore */ }   // lets dialogs wipe secrets
         document.removeEventListener('keydown', onKey, true);
         back.classList.add('out');
         setTimeout(() => { back.remove(); try { prevFocus?.focus?.({ preventScroll: true }); } catch { /* ignore */ } }, dur(160));
@@ -898,6 +899,7 @@
       h('div', { class: 'modal-actions' },
         hideCancel ? null : h('button', { class: 'btn', type: 'button', text: cancelText, onclick: () => close(null) }),
         okBtn));
+    form._dispose = () => fields.forEach((f) => { try { if (f.dispose) f.dispose(); } catch { /* ignore */ } });
     setTimeout(() => {
       const first = inputs[fields[0]?.name];
       if (first) { first.focus?.(); first.select?.(); } else okBtn.focus();
@@ -936,6 +938,7 @@
         onclick: () => { opts.action.fn(); kill(); },
       }) : null);
     host.append(t);
+    if (ulyOS.fx) ulyOS.fx.sound(opts.type === 'err' ? 'err' : opts.type === 'ok' ? 'ok' : 'notify', 0.8);
     let killed = false;
     const kill = () => {
       if (killed) return; killed = true;

@@ -17,8 +17,12 @@
   const DEFAULT_SETTINGS = {
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
-    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '24', widgetsVisible: true,
-    cursorStyle: 'classic', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
+    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '12', widgetsVisible: true,
+    cursorStyle: 'neon', cursorSize: 100, animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
+    // Telemetry FX (Settings → Effects)
+    fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, depth: 50, sfx: true, sfxVolume: 35,
+    // memory hygiene (Settings → Security)
+    clipClear: 30, purgeIdle: 120, purgeOnHide: true,
     // taskbar / dock / menu bar (see js/shell.js)
     taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 60, taskbarAutoHide: true, taskbarMagnify: true, taskbarLabels: true,
     showRam: true, showClock: true, menubar: true, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
@@ -44,8 +48,10 @@
   const CURSOR_STYLES = [['classic', 'Classic arrow'], ['dot', 'Dot'], ['cross', 'Crosshair'], ['neon', 'Neon arrow'], ['ring', 'Ring'], ['system', 'System default']];
   const ANIM_STYLES = [['scale', 'Scale'], ['slide', 'Slide up'], ['fade', 'Fade'], ['zoom', 'Zoom'], ['bounce', 'Bounce'], ['blur', 'Blur in']];
   const ICON_STYLES = [['vivid', 'Colorful & animated'], ['glass', 'Glass'], ['flat', 'Flat'], ['outline', 'Outline'], ['circle', 'Circle'], ['neon', 'Neon'], ['gradient', 'Gradient']];
-  const POOLS = { wallpaper: WALLPAPERS.map((w) => w[0]), cursorStyle: ['classic', 'dot', 'cross', 'neon', 'ring'], iconStyle: ICON_STYLES.map((i) => i[0]) };
+  const LANDS = ulyOS.landscapes ? ulyOS.landscapes.list : [];
+  const POOLS = { wallpaper: [...WALLPAPERS.map((w) => w[0]), ...LANDS.map((l) => 'land:' + l[0])], cursorStyle: ['classic', 'dot', 'cross', 'neon', 'ring'], iconStyle: ICON_STYLES.map((i) => i[0]) };
   const rnd = (a) => a[Math.floor(Math.random() * a.length)];
+  const wpName = (id) => (id.startsWith('land:') ? (LANDS.find((l) => l[0] === id.slice(5)) || [0, id])[1] : (WALLPAPERS.find((w) => w[0] === id) || [0, id])[1]);
   /* "random" settings resolve to one concrete pick that stays stable for the whole session */
   let eff = {};
   const val = (k) => (settings[k] === 'random' ? (eff[k] || (eff[k] = rnd(POOLS[k]))) : settings[k]);
@@ -64,7 +70,7 @@
     Settings.patch(pick);
     applyWallpaper();
     ulyOS.audit('Surprise me: wallpaper ' + pick.wallpaper + ', cursor ' + pick.cursorStyle + ', icons ' + pick.iconStyle + ', animation ' + pick.animStyle + ', accent ' + pick.accent, 'info');
-    if (announce) ui.toast('🎲 ' + WALLPAPERS.find((w) => w[0] === pick.wallpaper)[1] + ' · ' + pick.cursorStyle + ' cursor · ' + pick.iconStyle + ' icons · ' + pick.animStyle + ' windows', { timeout: 4200 });
+    if (announce) ui.toast('🎲 ' + wpName(pick.wallpaper) + ' · ' + pick.cursorStyle + ' cursor · ' + pick.iconStyle + ' icons · ' + pick.animStyle + ' windows', { timeout: 4200 });
   }
 
   function hexToRgb(hex) {
@@ -82,13 +88,20 @@
     root.style.setProperty('--speed', s.animSpeed);
     document.body.classList.toggle('no-anim', !s.animations);
     document.body.classList.toggle('no-blur', s.blur === 0);
+    root.style.setProperty('--fx-aurora', (s.fxAurora / 100).toFixed(2));
+    root.style.setProperty('--glow', (s.fxGlow / 100).toFixed(2));
+    root.style.setProperty('--depth', (s.depth / 50).toFixed(2));
+    document.body.classList.toggle('no-fx', !s.fxAnim);
+    document.body.classList.toggle('scanlines', !!s.fxScan);
+    if (ulyOS.fx) ulyOS.fx.setTilt(s.fxTilt);
     Cursor.apply();
     document.body.dataset.icons = val('iconStyle') || 'glass';
     ulyOS.anim.mode = s.animStyle || 'scale';
     const sz = ICON_SIZES[window.innerWidth < 520 ? 'small' : s.iconSize] || ICON_SIZES.medium;   // phones always use the compact grid
-    root.style.setProperty('--cell-w', sz.cw + 'px');
-    root.style.setProperty('--cell-h', sz.ch + 'px');
-    root.style.setProperty('--tile', sz.tile + 'px');
+    const k = clamp((s.iconScale || 100) / 100, 0.5, 1.6);
+    root.style.setProperty('--cell-w', Math.round(sz.cw * k) + 'px');
+    root.style.setProperty('--cell-h', Math.round(sz.ch * k) + 'px');
+    root.style.setProperty('--tile', Math.round(sz.tile * k) + 'px');
     ulyOS.Widgets?.applyVisibility?.();
     ulyOS.Shell?.layout?.();   // first: it changes the usable area the icon grid is measured against
     if (Desktop.ready) Desktop.layout();
@@ -100,6 +113,12 @@
     const wp = $('#wallpaper');
     wp.removeAttribute('style');
     const wpv = val('wallpaper');
+    if (wpv.startsWith('land:')) {   // procedurally drawn nature landscape
+      wp.className = 'wp-landscape';
+      const u = ulyOS.landscapes && ulyOS.landscapes.url(wpv.slice(5));
+      if (u) wp.style.backgroundImage = 'url("' + u + '")';
+      return;
+    }
     wp.className = 'wp-' + wpv;
     if (wpv === 'solid') wp.style.background = settings.wallpaperColor;
     if (wpv === 'custom') {
@@ -122,8 +141,11 @@
       const on = settings.cursor && style !== 'system';
       document.body.classList.toggle('no-cursor', !on);
       const ac = settings.accent;
+      const scale = clamp((+settings.cursorSize || 100) / 100, 0.5, 3);
+      const px = Math.min(96, Math.round(28 * scale)), kk = px / 28;
+      root.style.setProperty('--ring-scale', scale.toFixed(2));
       const svg = (body, hx, hy, fb) => 'url("data:image/svg+xml,' + encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28">' + body + '</svg>') + '") ' + hx + ' ' + hy + ', ' + fb;
+        '<svg xmlns="http://www.w3.org/2000/svg" width="' + px + '" height="' + px + '" viewBox="0 0 28 28">' + body + '</svg>') + '") ' + Math.round(hx * kk) + ' ' + Math.round(hy * kk) + ', ' + fb;
       const ARROW = 'M6 4l15 8.2-6.6 1.9-2.9 6.4z';
       const SETS = {
         classic: [svg('<path d="' + ARROW + '" fill="#fff" stroke="#000" stroke-opacity=".85" stroke-width="1.3" stroke-linejoin="round"/>', 6, 4, 'default'),
@@ -541,7 +563,9 @@
       { label: 'New text document', icon: 'filePlus', action: () => ulyOS.FS.newDocument() },
       { separator: true },
       { label: 'Surprise me  🎲', icon: 'sparkles', action: () => surprise(true) },
-      { label: 'Wallpaper', icon: 'image', submenu: [{ label: (settings.wallpaper === 'random' ? '✓ ' : '    ') + '🎲 Random each sign-in', action: () => { Settings.set('wallpaper', 'random'); eff = {}; applyWallpaper(); } }, { separator: true }].concat(WALLPAPERS.map(([id, label]) => ({
+      { label: 'Wallpaper', icon: 'image', submenu: [{ label: (settings.wallpaper === 'random' ? '✓ ' : '    ') + '🎲 Random each sign-in', action: () => { Settings.set('wallpaper', 'random'); eff = {}; applyWallpaper(); } },
+        { label: 'Nature & landscapes', icon: 'image', submenu: LANDS.map(([id, l]) => ({ label: (settings.wallpaper === 'land:' + id ? '✓ ' : '    ') + l, action: () => { eff = {}; Settings.set('wallpaper', 'land:' + id); applyWallpaper(); } })) },
+        { separator: true }].concat(WALLPAPERS.map(([id, label]) => ({
         label: (settings.wallpaper === id ? '✓ ' : '    ') + label,
         action: () => { Settings.set('wallpaper', id); applyWallpaper(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
       }))).concat([{ separator: true }, { label: 'More in Settings…', icon: 'settings', action: () => SettingsApp.open('appearance') }]) },
@@ -693,8 +717,10 @@
       document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     };
     const row = (label, desc, ctl) => h('div', { class: 'set-row' }, h('div', {}, h('div', { class: 'set-label', text: label }), desc ? h('div', { class: 'set-desc', text: desc }) : null), ctl);
+    const selS = (key, list) => h('select', { class: 'input sm', onchange: (e) => Settings.set(key, +e.target.value) }, list.map(([v, l]) => h('option', { value: v, text: l, selected: String(settings[key]) === String(v) })));
+    const swS = (key) => h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: !!settings[key], onchange: (e) => Settings.set(key, e.target.checked) }), h('i'));
     const credFieldFor = (pwc) => [{ name: 'type', label: 'Type', type: 'select', value: 'password', onchange: (v) => pwc.setMode(v), options: [{ value: 'password', label: 'Password (recommended)' }, { value: 'pin', label: 'PIN (digits only — weaker)' }] }];
-    const secretFields = (pwc) => [{ name: 'pw', type: 'custom', node: pwc.el, get: pwc.value, focus: pwc.focus }, { name: 'pw2', type: 'custom', get: pwc.confirm }];
+    const secretFields = (pwc) => [{ name: 'pw', type: 'custom', node: pwc.el, get: pwc.value, focus: pwc.focus, dispose: pwc.dispose }, { name: 'pw2', type: 'custom', get: pwc.confirm }];
     const validateNew = (v) => {
       if (v.type === 'pin' ? !/^\d{4,12}$/.test(v.pw) : v.pw.length < 8) return v.type === 'pin' ? 'PIN must be 4–12 digits' : 'Use at least 8 characters';
       if (v.pw !== v.pw2) return 'Entries do not match';
@@ -738,6 +764,11 @@
         } })) : null,
         row('Auto-lock after idle', prot ? 'Focus inside a cross-origin embedded site (e.g. Polotno) counts as activity — lock manually when you step away' : 'Requires a password', autoSel),
         row('Lock now', null, h('button', { class: 'btn sm', html: icon('lock', 14) + ' Lock', onclick: lockNow })),
+        h('h3', { text: 'Memory & clipboard' }),
+        row('Purge memory now', 'Wipes every typed or generated password field and the clipboard — like “Purge memory” in System Vault', h('button', { class: 'btn sm danger', html: icon('trash', 14) + ' Purge now', onclick: () => ulyOS.purge.now('manual') })),
+        row('Purge when idle', 'Wipe typed / generated secrets after this long without any activity', selS('purgeIdle', [[0, 'Never'], [30, '30 seconds'], [60, '1 minute'], [120, '2 minutes'], [300, '5 minutes']])),
+        row('Purge when the tab is hidden', 'Switching tabs or minimising the browser wipes typed / generated secrets', swS('purgeOnHide')),
+        row('Clear clipboard after copy', 'Overwrites the clipboard some seconds after you copy a generated password', selS('clipClear', [[0, 'Never (not recommended)'], [15, '15 seconds'], [30, '30 seconds'], [60, '1 minute']])),
         h('h3', { text: 'Backup' }),
         row('Export encrypted profile', 'Settings, desktop layout, audit log and app data (not sandbox files) as a .ulyprofile file', h('button', { class: 'btn sm', html: icon('download', 14) + ' Export…', onclick: async () => {
           const pwc = ui.passwordInput();
@@ -777,6 +808,7 @@
       out[k] = v;
     }
     const clampKey = (k, lo, hi) => { if (k in out) out[k] = clamp(out[k], lo, hi); };
+    clampKey('fxAurora', 0, 100); clampKey('fxTilt', 0, 10); clampKey('fxGlow', 0, 100); clampKey('iconScale', 50, 160); clampKey('depth', 0, 100); clampKey('sfxVolume', 0, 100); clampKey('cursorSize', 50, 300); clampKey('clipClear', 0, 600); clampKey('purgeIdle', 0, 3600);
     clampKey('animSpeed', 0.25, 3); clampKey('blur', 0, 60); clampKey('glassAlpha', 0.3, 1); clampKey('taskbarSize', 36, 84);
     ['accent', 'wallpaperColor'].forEach((k) => { if (k in out && !HEX.test(out[k])) delete out[k]; });
     if ('wallpaper' in out && !oneOf(out.wallpaper, [...POOLS.wallpaper, 'solid', 'custom', 'random'])) delete out.wallpaper;
@@ -851,6 +883,50 @@
     ui.toast('Settings imported', { type: 'ok' });
   }
 
+  /* ---- About tab: what it is, diagnostics, privacy notes and the full version history ---- */
+  function aboutSection() {
+    const wrap = h('div', {});
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    const diag = () => [
+      ['Version', 'ulyOS ' + ulyOS.version],
+      ['Build', ulyOS.config.OFFLINE ? 'Offline (nothing is sent anywhere)' : 'Online — ' + location.host + location.pathname],
+      ['Secure context (encryption)', window.isSecureContext ? 'yes' : 'NO — HTTPS or localhost required'],
+      ['Private file system (OPFS)', ulyOS.FS.roots.sandbox.handle ? 'ready' : 'unavailable'],
+      ['File writing', typeof FileSystemFileHandle !== 'undefined' && 'createWritable' in FileSystemFileHandle.prototype ? 'native' : 'worker fallback (Safari / iOS)'],
+      ['Folder picker', window.showDirectoryPicker ? 'supported' : 'not supported'],
+      ['Display mode', standalone ? 'installed app' : 'browser tab'],
+      ['Viewport', window.innerWidth + '×' + window.innerHeight + ' @' + (window.devicePixelRatio || 1) + 'x · ' + (ulyOS.WM.compact() ? 'phone layout' : 'desktop layout') + ' · ' + (ulyOS.util.isTouch() ? 'touch' : 'mouse')],
+      ['Profile vault', ulyOS.security.isProtected() ? 'encrypted (AES-256-GCM)' : 'not encrypted'],
+      ['Browser', navigator.userAgent.replace(/\s+/g, ' ').slice(0, 110)],
+    ];
+    const table = h('div', { class: 'about-diag mono' });
+    const paint = () => table.replaceChildren(...diag().map(([k, v]) => h('div', { class: 'ad-row' }, h('span', { text: k }), h('b', { text: v }))));
+    paint();
+    navigator.storage?.estimate?.().then((e) => { table.append(h('div', { class: 'ad-row' }, h('span', { text: 'Storage used' }), h('b', { text: fmtBytes(e.usage) + ' of ' + fmtBytes(e.quota) }))); }).catch(() => {});
+    navigator.serviceWorker?.getRegistration?.().then((r) => { table.append(h('div', { class: 'ad-row' }, h('span', { text: 'Offline cache (service worker)' }), h('b', { text: r ? 'active' : 'not installed' }))); }).catch(() => {});
+    const log = ulyOS.CHANGELOG.map((c, i) => h('div', { class: 'cl' + (i === 0 ? ' latest' : '') },
+      h('div', { class: 'cl-head' }, h('b', { class: 'mono', text: 'v' + c.v }), h('span', { class: 'cl-date mono', text: c.d }), i === 0 ? h('span', { class: 'cl-tag', text: 'current' }) : null),
+      h('ul', {}, c.n.map((x) => h('li', { text: x })))));
+    wrap.append(
+      h('div', { class: 'about-hero' }, h('div', { class: 'about-logo', html: '<svg viewBox="0 0 80 80" width="44" height="44"><circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="40" cy="40" r="5" fill="currentColor"/></svg>' }),
+        h('div', {}, h('div', { class: 'about-name', html: 'uly<span>OS</span>' }), h('div', { class: 'mono about-ver', text: 'version ' + ulyOS.version + ' · ' + ulyOS.CHANGELOG[0].d }))),
+      h('p', { class: 'set-desc about-p', text: 'A private, browser-based operating system in vanilla HTML, CSS and JavaScript — no frameworks, no build step, no server. Everything runs on your device.' }),
+      h('h3', { text: 'Security model' }),
+      h('p', { class: 'set-desc about-p', text: 'Each profile’s vault (settings, layout, audit log, app data, notes) is encrypted with AES-256-GCM using a key derived by PBKDF2-SHA256 (600,000 iterations). The key is non-extractable and lives only in memory while you are signed in. There is no recovery: a forgotten password cannot be reset, so keep an encrypted backup. Typed or generated secrets can be wiped at any time with Purge memory.' }),
+      h('h3', { text: 'Network & privacy' }),
+      h('p', { class: 'set-desc about-p', text: ulyOS.config.OFFLINE ? 'This is the offline build: it sends nothing anywhere. Widgets that fetch public data (crypto, scores, headlines, markets) only work while you are online and only while the widget exists.' : 'The online build sends only (1) a Contact Admin message when you press Send, and (2) a notice to the site admin when a profile is created — profile name, whether it is password-protected, the optional email you typed, time, site, language and time zone; never passwords, keys, files or app data. Data widgets call public APIs (CoinGecko, ESPN, Polymarket, Wikipedia, Hacker News) only while the widget exists.' }),
+      h('h3', { text: 'Limits you should know' }),
+      h('p', { class: 'set-desc about-p', text: 'The browser and operating system must be trustworthy — malware or a hostile extension can read the page. Sandbox files are isolated per profile but not encrypted unless you encrypt them (Files → Encrypt…). PINs are weak against offline guessing. RAM and CPU in the Task Manager are simulations. Pages on the same ulyweb.github.io origin share browser storage, so use a password on any profile that matters.' }),
+      h('h3', { text: 'Bundled apps' }),
+      h('p', { class: 'set-desc about-p', text: 'QR Seal (ulyweb/qrcode), System Vault (ulyweb/key), Crypto Compass (ulyweb/crypto) and TrustVault run inside ulyOS windows; their storage is redirected into your encrypted vault.' }),
+      h('h3', { text: 'Diagnostics' }), table,
+      h('div', { class: 'set-tools' },
+        h('button', { class: 'btn sm', html: icon('copy', 14) + ' Copy diagnostics', onclick: async () => { try { await navigator.clipboard.writeText('ulyOS diagnostics\n' + diag().map(([k, v]) => k + ': ' + v).join('\n')); ui.toast('Diagnostics copied — paste it into a bug report', { type: 'ok' }); } catch { ui.toast('Could not copy', { type: 'err' }); } } }),
+        h('button', { class: 'btn sm', html: icon('refresh', 14) + ' Refresh', onclick: () => { paint(); ui.toast('Refreshed', { timeout: 1200 }); } })),
+      h('h3', { text: 'Version history' }), h('div', { class: 'changelog' }, log));
+    return wrap;
+  }
+
   function buildSettings(win, startTab) {
     const sw = (key, after) => h('label', { class: 'switch' },
       h('input', { type: 'checkbox', checked: !!settings[key], onchange: (e) => { Settings.set(key, e.target.checked); after?.(); ulyOS.audit('Setting ' + key + ' → ' + (e.target.checked ? 'on' : 'off'), 'info'); } }), h('i'));
@@ -863,11 +939,16 @@
 
     /* wallpaper tiles */
     const tiles = h('div', { class: 'wp-list' });
+    const landTiles = h('div', { class: 'wp-list' });
     const paintTiles = () => {
       const randTile = h('button', {
         class: 'wp-tile rand' + (settings.wallpaper === 'random' ? ' active' : ''), title: 'A different wallpaper every sign-in',
         onclick: () => { Settings.set('wallpaper', 'random'); eff = {}; applyWallpaper(); paintTiles(); ulyOS.audit('Wallpaper set to random on each sign-in', 'info'); },
       }, h('div', { class: 'wp-thumb' }, '🎲'), h('span', { text: 'Random' }));
+      landTiles.replaceChildren(...LANDS.map(([id, label]) => h('button', {
+        class: 'wp-tile' + (settings.wallpaper === 'land:' + id ? ' active' : ''), title: label,
+        onclick: () => { eff = {}; Settings.set('wallpaper', 'land:' + id); applyWallpaper(); paintTiles(); ulyOS.audit("Wallpaper changed to landscape '" + label + "'", 'info'); },
+      }, h('div', { class: 'wp-thumb', style: { backgroundImage: 'url("' + ulyOS.landscapes.url(id) + '")', backgroundSize: 'cover', backgroundPosition: 'center' } }), h('span', { text: label }))));
       tiles.replaceChildren(randTile, ...WALLPAPERS.map(([id, label]) => h('button', {
         class: 'wp-tile' + (settings.wallpaper === id ? ' active' : ''), title: label,
         onclick: () => { Settings.set('wallpaper', id); applyWallpaper(); paintTiles(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
@@ -911,6 +992,33 @@
     const storageEl = h('span', { class: 'mono', text: '…' });
     navigator.storage?.estimate?.().then((e) => { storageEl.textContent = fmtBytes(e.usage) + ' of ' + fmtBytes(e.quota); }).catch(() => { storageEl.textContent = 'n/a'; });
 
+    const FX_DEFAULTS = { fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, blur: 24, glassAlpha: 0.72, depth: 50, sfx: true, sfxVolume: 35, cursorSize: 100 };
+    let currentTab = startTab;
+    const buildEffects = () => h('div', {},
+      h('h3', { text: 'Animations' }),
+      row('UI animations', 'Window open/close/minimize, boot sequence, animated wallpapers', sw('animations')),
+      row('Window animation', 'How windows appear and close — “Random” picks a style for every window', h('div', { class: 'btn-row' }, choose('animStyle', ANIM_STYLES, 'Random per window'), h('button', { class: 'btn sm', text: 'Try', onclick: tryAnim }))),
+      row('Animation speed', 'Slower ← → faster', range('animSpeed', 0.5, 2, 0.25, (v) => v + '×')),
+      row('Boot animation', 'Show the full boot log on restart', sw('bootAnim')),
+      h('h3', { text: 'Telemetry FX' }),
+      row('Aurora intensity', 'Soft animated glow floating over the wallpaper', range('fxAurora', 0, 100, 1, (v) => v)),
+      row('3D tilt (deg)', 'Widgets, desktop icons and profile cards lean toward the pointer', range('fxTilt', 0, 10, 1, (v) => v + '°')),
+      row('FX animation', 'Ambient motion: aurora drift, icon float, animated icon artwork and wallpapers', sw('fxAnim')),
+      row('Toolbar glow', 'Accent glow around the dock, taskbar and menu bar', range('fxGlow', 0, 100, 1, (v) => v)),
+      row('Icon scale %', 'Size of the desktop icons', range('iconScale', 60, 150, 5, (v) => v + '%')),
+      row('CRT scanlines', 'Retro scanline overlay across the whole screen', sw('fxScan')),
+      row('Glass blur (px)', 'Backdrop blur behind windows, widgets and the dock', range('blur', 0, 40, 2, (v) => v + 'px')),
+      row('Panel fill %', 'Window opacity — lower values reveal more of the wallpaper', range('glassAlpha', 0.4, 0.98, 0.02, (v) => Math.round(v * 100))),
+      row('Depth (shadow) %', 'Strength of the shadows under windows, widgets and the dock', range('depth', 0, 100, 1, (v) => v)),
+      row('Sound effects', 'Soft synthesized sounds for windows, notifications, lock and purge (no audio files)', sw('sfx')),
+      row('Sound volume', null, h('div', { class: 'btn-row' }, range('sfxVolume', 0, 100, 1, (v) => v), h('button', { class: 'btn sm', text: 'Test', onclick: () => ulyOS.fx.sound('ok') }))),
+      h('div', { class: 'set-tools' }, h('button', { class: 'btn', text: 'Reset FX to defaults', onclick: () => { Settings.patch(FX_DEFAULTS); ui.toast('FX reset to defaults', { type: 'ok', timeout: 1800 }); rebuildEffects(); } })),
+      h('h3', { text: 'Pointer' }),
+      row('Custom cursor', 'SVG cursor with a trailing ring (not shown inside embedded apps)', sw('cursor')),
+      row('Cursor style', '“Random” picks one each sign-in; the accent color tints Neon, Dot and Crosshair', choose('cursorStyle', CURSOR_STYLES, 'Random each sign-in')),
+      row('Pointer size', 'Scales the cursor and its trailing ring', range('cursorSize', 60, 250, 10, (v) => v + '%')));
+    const rebuildEffects = () => { sections.effects = buildEffects(); if (currentTab === 'effects') show('effects'); };
+
     const sections = {
       appearance: h('div', {},
         h('div', { class: 'set-tools' },
@@ -918,6 +1026,7 @@
           h('button', { class: 'btn', text: 'Shuffle wallpaper', onclick: () => { Settings.set('wallpaper', rnd(POOLS.wallpaper)); applyWallpaper(); paintTiles(); } })),
         row('Surprise me on every sign-in', 'Pick a fresh random wallpaper, accent, cursor, icon and animation style each time you sign in', sw('shuffleOnLogin')),
         h('h3', { text: 'Wallpaper' }), tiles,
+        h('h3', { text: 'Nature & landscapes' }), landTiles,
         row('Solid color', 'Pick any flat background color', colorIn),
         row('Image from your computer', 'Stored in the sandbox filesystem (Wallpapers/)', h('button', { class: 'btn sm', html: icon('upload', 14) + ' Choose image…', onclick: () => fileIn.click() })),
         row('Image from URL', null, h('div', { class: 'inline-form' }, urlIn, h('button', { class: 'btn sm', text: 'Apply', onclick: () => {
@@ -927,18 +1036,7 @@
           ulyOS.audit('Wallpaper set from ' + hostName(u), 'info');
         } }))),
         h('h3', { text: 'Accent color' }), swatches, fileIn),
-      effects: h('div', {},
-        h('h3', { text: 'Animations' }),
-        row('UI animations', 'Window open/close/minimize, boot sequence, animated wallpapers', sw('animations')),
-        row('Window animation', 'How windows appear and close — “Random” picks a style for every window', h('div', { class: 'btn-row' }, choose('animStyle', ANIM_STYLES, 'Random per window'), h('button', { class: 'btn sm', text: 'Try', onclick: tryAnim }))),
-        row('Animation speed', 'Slower ← → faster', range('animSpeed', 0.5, 2, 0.25, (v) => v + '×')),
-        row('Boot animation', 'Show the full boot log on restart', sw('bootAnim')),
-        h('h3', { text: 'Glass' }),
-        row('Blur strength', 'Backdrop blur behind windows and the taskbar', range('blur', 0, 40, 2, (v) => v + 'px')),
-        row('Window opacity', 'Lower values reveal more of the wallpaper', range('glassAlpha', 0.4, 0.98, 0.02, (v) => Math.round(v * 100) + '%')),
-        h('h3', { text: 'Pointer' }),
-        row('Custom cursor', 'SVG cursor with a trailing ring (not shown inside embedded apps)', sw('cursor')),
-        row('Cursor style', '“Random” picks one each sign-in; the accent color tints Neon, Dot and Crosshair', choose('cursorStyle', CURSOR_STYLES, 'Random each sign-in'))),
+      effects: buildEffects(),
       desktop: h('div', {},
         h('h3', { text: 'Icons' }),
         row('Icon size', null, seg('iconSize', ['small', 'medium', 'large'])),
@@ -952,6 +1050,7 @@
       widgets: ulyOS.Widgets.settingsSection({ row, sw }),
       shell: ulyOS.Shell.settingsSection({ row, sw, range, choose }),
       security: securitySection(),
+      about: aboutSection(),
       system: h('div', {},
         h('h3', { text: 'Storage' }),
         row('Sandbox usage', 'Origin-private storage for this site', storageEl),
@@ -963,17 +1062,13 @@
         row('Restart ulyOS', 'Close all windows and replay the boot sequence', h('button', { class: 'btn sm', text: 'Restart', onclick: restart })),
         ulyOS.config.OFFLINE ? null : row('Offline version', 'Download a .zip you can run without the internet (no admin contact, nothing is sent anywhere)', h('button', { class: 'btn sm', html: icon('download', 14) + ' Download .zip', onclick: () => ulyOS.offline.download() })),
         ulyOS.admin.enabled() ? row('Contact Admin', 'Send a message to the person who runs this site', h('button', { class: 'btn sm', html: icon('mailSend', 14) + ' Write message', onclick: () => ulyOS.admin.contact() })) : null,
-        h('h3', { text: 'About' }),
-        h('div', { class: 'about mono' },
-          h('div', { text: 'ulyOS 1.0 · vanilla HTML/CSS/JS' }),
-          h('div', { text: 'Secure context: ' + window.isSecureContext }),
-          h('div', { text: 'OPFS: ' + (ulyOS.FS.roots.sandbox.handle ? 'ready' : 'unavailable') }),
-          h('div', { text: 'Directory picker: ' + (window.showDirectoryPicker ? 'supported' : 'unsupported') }))),
+        h('div', { class: 'set-desc', style: { marginTop: '16px' }, text: 'Version history, diagnostics and the privacy notes are in the About tab.' })),
     };
-    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['widgets', 'clock', 'Widgets'], ['shell', 'grid', 'Dock & Menu bar'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System']];
+    const navDefs = [['appearance', 'palette', 'Appearance'], ['effects', 'sliders', 'Effects'], ['desktop', 'desktop', 'Desktop'], ['widgets', 'clock', 'Widgets'], ['shell', 'grid', 'Dock & Menu bar'], ['security', 'shield', 'Security'], ['system', 'cpu', 'System'], ['about', 'info', 'About']];
     const navBtns = {};
     const content = h('div', { class: 'set-content' });
     function show(id) {
+      currentTab = id;
       Object.entries(navBtns).forEach(([k, b]) => b.classList.toggle('active', k === id));
       content.replaceChildren(sections[id]); content.scrollTop = 0;
     }
@@ -987,7 +1082,13 @@
     const offs = bus.on('settings:change', stamp);
     win.onClose = () => offs();
     const importIn = h('input', { type: 'file', accept: '.json,application/json', hidden: true, onchange: async (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) await importSettings(f); } });
-    const foot = h('div', { class: 'set-foot' }, saved, h('span', { class: 'grow' }),
+    const snapshot = Settings.all();
+    const undo = h('button', { class: 'btn sm', html: icon('refresh', 14) + ' Undo changes', title: 'Put every setting back to how it was when this window opened', onclick: async () => {
+      eff = {}; Settings.patch(snapshot); await applyWallpaper();
+      ui.toast('Settings restored to how they were when you opened this window', { type: 'ok' });
+      const t = currentTab; await WM.close(win, { force: true }); SettingsApp.open(t);
+    } });
+    const foot = h('div', { class: 'set-foot' }, saved, h('span', { class: 'grow' }), undo,
       h('button', { class: 'btn sm', html: icon('save', 14) + ' Save now', title: 'Write everything to the profile vault immediately', onclick: async () => { await ulyOS.vault.flush(); stamp(); ui.toast('Saved', { type: 'ok', timeout: 1600 }); } }),
       h('button', { class: 'btn sm', html: icon('download', 14) + ' Export settings', title: 'Download appearance, dock and icon layout as a file', onclick: exportSettings }),
       h('button', { class: 'btn sm', html: icon('upload', 14) + ' Import settings', title: 'Load a settings file exported from another device', onclick: () => importIn.click() }), importIn);
@@ -1008,6 +1109,10 @@
       Object.assign(settings, { menubar: true, taskbarSize: 60, taskbarAutoHide: true });
       store.set('ulyos.settings', settings); store.set('ulyos.migr.defaults3', true);
     }
+    if (!store.get('ulyos.migr.defaults4', false)) {   // one-time: 12-hour clock + neon cursor
+      Object.assign(settings, { clockFormat: '12', cursorStyle: 'neon' });
+      store.set('ulyos.settings', settings); store.set('ulyos.migr.defaults4', true);
+    }
     if (settings.shuffleOnLogin) surprise(false);
     applySettings();
     Desktop.init();
@@ -1016,6 +1121,7 @@
     boot(true);
   }
   function init() {
+    if (ulyOS.fx) ulyOS.fx.init();
     let wasCompact = ulyOS.WM.compact();
     window.addEventListener('resize', () => { const c = ulyOS.WM.compact(); if (c !== wasCompact) { wasCompact = c; applySettings(); } });
     applySettings();   // defaults — gives the profile screen the custom cursor + glass look
@@ -1035,7 +1141,7 @@
     });
     return out;
   }
-  ulyOS.desktopApi = { launch, catalog, iconGradient: gradientOf, exportSettings, newShortcut: () => shortcutDialog(null), iconHTML, lockNow, restart, surprise, openSettings: (t) => SettingsApp.open(t), WALLPAPERS, applyWallpaper, Settings, setWallpaper: (id) => { eff = {}; Settings.set('wallpaper', id); applyWallpaper(); }, SYS_APPS };
+  ulyOS.desktopApi = { launch, catalog, LANDSCAPES: LANDS, iconGradient: gradientOf, exportSettings, newShortcut: () => shortcutDialog(null), iconHTML, lockNow, restart, surprise, openSettings: (t) => SettingsApp.open(t), WALLPAPERS, applyWallpaper, Settings, setWallpaper: (id) => { eff = {}; Settings.set('wallpaper', id); applyWallpaper(); }, SYS_APPS };
   ulyOS.restart = restart;
   ulyOS.launch = launch;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

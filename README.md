@@ -62,3 +62,11 @@ Simulated RAM from DOM nodes and iframes, plus a persistent audit trail.
 - These widgets call public APIs (CoinGecko, ESPN, Polymarket, Wikipedia, Hacker News) only while the widget exists.
 - Defaults: menu bar on, dock size 60, auto-hide on, floating dock, colorful icons.
 - **Phones & tablets** (iPhone, Android, iPadOS): one-tap to open icons, long-press for context menus, full-screen windows on phones, a tap-to-reveal dock handle, a widgets panel on the dock, safe-area support for notches, and installable as a home-screen app (web app manifest + icons + service worker). iOS Safari file saving uses an OPFS worker fallback because it lacks `createWritable()`.
+
+## 1.7.0 — memory hygiene, FX panel, landscapes, About
+- **Purge memory**: every password generator has a **Purge** button (wipes the fields and, if you copied it, the clipboard). Typed or generated secrets are also wiped automatically when idle (default 2 min) and when the tab is hidden; clipboard auto-clears after copy (default 30 s). Settings → Security → Memory & clipboard, logo menu → Purge memory now.
+- **Effects panel** (modelled on System Vault's Telemetry FX): aurora intensity, 3D tilt, FX animation, toolbar glow, icon scale, CRT scanlines, glass blur, panel fill, depth (shadow), sound effects + volume, **Reset FX to defaults**, and **Undo changes** in the Settings footer.
+- **Pointer**: size slider; **Neon arrow** is the default style.
+- **Clock**: 12-hour AM/PM is the default.
+- **Nature & landscapes**: 12 procedurally drawn SVG wallpapers (no downloads, work offline), also in the desktop right-click → Wallpaper menu and in Random / Surprise me.
+- **About**: version, diagnostics (with Copy diagnostics) and the complete version history (`js/version.js` — add an entry for every release).

@@ -14,7 +14,7 @@ ulyOS.config = {
   /* Every file in the offline package (paths relative to index.html). */
   FILES: [
     'index.html', 'css/style.css', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png',
-    'js/config.js', 'js/window.js', 'js/security.js', 'js/admin.js', 'js/offline.js', 'js/telemetry.js', 'js/filesystem.js', 'js/desktop.js', 'js/shell.js', 'js/widgets.js',
+    'js/config.js', 'js/version.js', 'js/window.js', 'js/security.js', 'js/admin.js', 'js/offline.js', 'js/telemetry.js', 'js/filesystem.js', 'js/landscapes.js', 'js/fx.js', 'js/desktop.js', 'js/shell.js', 'js/widgets.js',
     'apps/trustvault.html', 'apps/qrseal.html', 'apps/systemvault.html', 'apps/cryptocompass.html',
   ],
 };

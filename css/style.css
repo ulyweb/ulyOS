@@ -157,8 +157,8 @@ input[type=color] { width: 44px; height: 28px; padding: 0; border: 1px solid var
 .window { position: absolute; display: flex; flex-direction: column; pointer-events: auto; min-width: 0; outline: none;
   background: rgba(12, 12, 15, var(--glass-alpha)); backdrop-filter: blur(var(--blur)) saturate(150%); -webkit-backdrop-filter: blur(var(--blur)) saturate(150%);
   border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden;
-  box-shadow: 0 18px 50px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .04); transition: border-color .2s, box-shadow .25s; }
-.window.focused { border-color: var(--border-strong); box-shadow: 0 40px 100px rgba(0, 0, 0, .75), 0 0 0 1px rgba(255, 255, 255, .03), inset 0 1px 0 rgba(255, 255, 255, .07); }
+  box-shadow: 0 calc(18px * var(--depth, 1)) calc(50px * var(--depth, 1)) rgba(0, 0, 0, calc(.5 * var(--depth, 1))), inset 0 1px 0 rgba(255, 255, 255, .04); transition: border-color .2s, box-shadow .25s; }
+.window.focused { border-color: var(--border-strong); box-shadow: 0 calc(40px * var(--depth, 1)) calc(100px * var(--depth, 1)) rgba(0, 0, 0, calc(.75 * var(--depth, 1))), 0 0 0 1px rgba(255, 255, 255, .03), inset 0 1px 0 rgba(255, 255, 255, .07); }
 .window.geo-anim { transition: left .24s var(--ease), top .24s var(--ease), width .24s var(--ease), height .24s var(--ease), border-radius .24s; }
 .window.maximized { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; border-radius: 0; border-width: 0; }
 .window.dragging, .window.resizing { transition: none; }
@@ -230,7 +230,7 @@ input[type=color] { width: 44px; height: 28px; padding: 0; border: 1px solid var
 #taskbar[data-pos=left] { left: var(--sal, 0px); top: var(--mb-h); bottom: var(--sab, 0px); width: var(--tb-size); flex-direction: column; padding: 10px 0; border-right: 1px solid var(--border); }
 #taskbar[data-pos=right] { right: var(--sar, 0px); top: var(--mb-h); bottom: var(--sab, 0px); width: var(--tb-size); flex-direction: column; padding: 10px 0; border-left: 1px solid var(--border); }
 /* floating dock (macOS / iPadOS style) */
-#taskbar[data-mode=dock] { border: 1px solid var(--border-strong); border-radius: 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 255, 255, .06); gap: 6px; }
+#taskbar[data-mode=dock] { border: 1px solid var(--border-strong); border-radius: 24px; box-shadow: 0 calc(20px * var(--depth, 1)) calc(60px * var(--depth, 1)) rgba(0, 0, 0, calc(.55 * var(--depth, 1))), 0 0 calc(var(--glow, .55) * 34px) rgba(var(--accent-rgb), calc(var(--glow, .55) * .3)), inset 0 1px 0 rgba(255, 255, 255, .06); gap: 6px; }
 #taskbar[data-mode=dock][data-pos=bottom] { left: 50%; right: auto; bottom: calc(10px + var(--sab, 0px)); height: var(--tb-size); width: auto; padding: 0 12px; transform: translateX(-50%); }
 #taskbar[data-mode=dock][data-pos=top] { left: 50%; right: auto; top: calc(var(--mb-h) + 10px); height: var(--tb-size); width: auto; padding: 0 12px; transform: translateX(-50%); }
 #taskbar[data-mode=dock][data-pos=left] { left: calc(10px + var(--sal, 0px)); top: 50%; bottom: auto; width: var(--tb-size); height: auto; padding: 12px 0; transform: translateY(-50%); }
@@ -369,7 +369,7 @@ body:not(.authed) #menubar, body.locked #menubar { visibility: hidden; }
 /* ==========================================================================
    Custom cursor ring
    ========================================================================== */
-#cursor-ring { position: fixed; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; z-index: 30000; pointer-events: none; border: 1px solid rgba(255, 255, 255, .28); background: radial-gradient(circle, rgba(255, 255, 255, .06), transparent 70%); transition: opacity .2s, width .2s, height .2s, margin .2s, border-color .2s, background .2s; will-change: transform; mix-blend-mode: screen; }
+#cursor-ring { position: fixed; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; z-index: 30000; pointer-events: none; border: 1px solid rgba(255, 255, 255, .28); background: radial-gradient(circle, rgba(255, 255, 255, .06), transparent 70%); transition: opacity .2s, width .2s, height .2s, margin .2s, border-color .2s, background .2s; will-change: transform; mix-blend-mode: screen; scale: var(--ring-scale, 1); }
 #cursor-ring.hidden, body.no-cursor #cursor-ring { opacity: 0; }
 #cursor-ring.hot { width: 44px; height: 44px; margin: -6px 0 0 -6px; border-color: rgba(var(--accent-rgb), .7); background: rgba(var(--accent-rgb), .1); }
 #cursor-ring.down { width: 22px; height: 22px; margin: 5px 0 0 5px; }
@@ -539,7 +539,7 @@ body.locked #desktop, body.locked #windows, body.locked #taskbar, body.locked #s
 .auth-foot { font: 11px var(--mono); color: var(--faint); text-align: center; }
 .prof-grid { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
 .prof { width: 150px; padding: 18px 10px 14px; display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: 18px; border: 1px solid var(--border); background: var(--surface); transition: transform .2s var(--ease), background .2s, border-color .2s; }
-.prof:hover { transform: translateY(-3px); background: var(--surface-2); border-color: var(--border-strong); }
+.prof:hover { transform: perspective(700px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-3px); background: var(--surface-2); border-color: var(--border-strong); }
 .prof.last { border-color: rgba(var(--accent-rgb), .45); }
 .prof-name { font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .prof-sub { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--faint); }
@@ -668,7 +668,7 @@ body[data-icons=vivid] .di-tile { position: relative; overflow: hidden; backgrou
   box-shadow: 0 10px 24px color-mix(in srgb, var(--g2) 55%, transparent), inset 0 1px 0 rgba(255, 255, 255, .55), inset 0 -10px 16px rgba(0, 0, 0, .18);
   transition: transform .25s var(--ease), box-shadow .25s; animation: tile-bob 5.5s ease-in-out infinite; animation-delay: var(--bd, 0s); }
 body[data-icons=vivid] .di-tile::after { content: ""; position: absolute; inset: -40% -60%; pointer-events: none; background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, .5) 50%, transparent 60%); transform: translateX(-85%); transition: transform .75s var(--ease); }
-body[data-icons=vivid] .desk-icon:hover .di-tile { transform: translateY(-5px) scale(1.09); box-shadow: 0 20px 38px color-mix(in srgb, var(--g2) 70%, transparent), inset 0 1px 0 rgba(255, 255, 255, .6), inset 0 -10px 16px rgba(0, 0, 0, .15); }
+body[data-icons=vivid] .desk-icon:hover .di-tile { transform: perspective(600px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(-5px) scale(1.09); box-shadow: 0 20px 38px color-mix(in srgb, var(--g2) 70%, transparent), inset 0 1px 0 rgba(255, 255, 255, .6), inset 0 -10px 16px rgba(0, 0, 0, .15); }
 body[data-icons=vivid] .desk-icon:hover .di-tile::after { transform: translateX(85%); }
 body[data-icons=vivid] .desk-icon:active .di-tile { transform: scale(.94); }
 body[data-icons=vivid] .di-tile.has-art .art { display: block; width: 72%; height: 72%; }
@@ -714,7 +714,7 @@ body[data-icons=vivid] #taskbar[data-mode=dock] .tb-start { background: linear-g
 body.widgets-off #widgets { display: none; }
 .wgt { position: absolute; pointer-events: auto; display: flex; flex-direction: column; border-radius: 24px; overflow: hidden; touch-action: none; cursor: grab;
   background: linear-gradient(160deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .03)), rgba(12, 12, 16, .55); backdrop-filter: blur(var(--blur)) saturate(160%); -webkit-backdrop-filter: blur(var(--blur)) saturate(160%);
-  border: 1px solid var(--border-strong); box-shadow: 0 16px 44px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .08); animation: icon-in .45s var(--ease) both; transition: box-shadow .2s, border-color .2s; }
+  border: 1px solid var(--border-strong); box-shadow: 0 calc(16px * var(--depth, 1)) calc(44px * var(--depth, 1)) rgba(0, 0, 0, calc(.45 * var(--depth, 1))), inset 0 1px 0 rgba(255, 255, 255, .08); animation: icon-in .45s var(--ease) backwards; transform: perspective(900px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: box-shadow .2s, border-color .2s; }
 .wgt:hover { border-color: rgba(var(--accent-rgb), .45); }
 .wgt.dragging { cursor: grabbing; z-index: 3; box-shadow: 0 30px 70px rgba(0, 0, 0, .6); transition: none; }
 .w-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 10px 12px 0; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
@@ -841,3 +841,36 @@ body.compact .wgt { position: relative; left: auto !important; top: auto !import
 .w-panel-x { display: none; position: sticky; top: 0; align-self: flex-end; z-index: 3; padding: 8px 18px; border-radius: 99px; border: 1px solid var(--border-strong); background: rgba(20, 20, 26, .9); color: var(--text); }
 body.compact #widgets .w-panel-x { display: block; }
 @media (max-width: 420px) { .auth-brand { letter-spacing: .22em; } .modal { padding: 18px; } }
+
+
+/* ==========================================================================
+   Telemetry FX layer: aurora, toolbar glow, scanlines, FX animation switch
+   ========================================================================== */
+#fx-aurora { position: fixed; inset: -10%; z-index: 0; pointer-events: none; mix-blend-mode: screen; filter: blur(34px); opacity: calc(var(--fx-aurora, .65) * .5);
+  background: radial-gradient(42% 38% at 18% 28%, rgba(var(--accent-rgb), .6), transparent 70%), radial-gradient(38% 34% at 82% 72%, rgba(94, 234, 212, .42), transparent 70%), radial-gradient(30% 28% at 60% 18%, rgba(244, 114, 182, .3), transparent 70%);
+  animation: fx-drift 28s ease-in-out infinite alternate; }
+@keyframes fx-drift { 0% { transform: translate3d(0, 0, 0) scale(1); } 100% { transform: translate3d(5%, 4%, 0) scale(1.12); } }
+#menubar { box-shadow: 0 0 calc(var(--glow, .55) * 26px) rgba(var(--accent-rgb), calc(var(--glow, .55) * .22)); }
+#taskbar:not([data-mode=dock]) { box-shadow: 0 0 calc(var(--glow, .55) * 28px) rgba(var(--accent-rgb), calc(var(--glow, .55) * .24)); }
+body.scanlines::after { content: ""; position: fixed; inset: 0; z-index: 29000; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, .2) 0 1px, transparent 1px 3px); mix-blend-mode: multiply; }
+body.no-fx #fx-aurora, body.no-fx .di-tile, body.no-fx .art *, body.no-fx #wallpaper::before, body.no-fx #wallpaper::after, body.no-fx #wallpaper.wp-lagoon, body.no-fx .tm-dot { animation: none !important; }
+.wp-landscape { background-size: cover; background-position: center bottom; background-repeat: no-repeat; }
+@media (pointer: coarse) { #fx-aurora { filter: blur(24px); } }
+
+/* ==========================================================================
+   Settings → About, purge note
+   ========================================================================== */
+.gen-note { font-size: 10.5px; color: var(--faint); line-height: 1.4; }
+.about-hero { display: flex; align-items: center; gap: 16px; margin: 16px 0 6px; }
+.about-logo { width: 68px; height: 68px; border-radius: 20px; display: grid; place-items: center; color: #fff; background: linear-gradient(150deg, rgba(var(--accent-rgb), .55), rgba(var(--accent-rgb), .15)); border: 1px solid var(--border-strong); box-shadow: 0 10px 30px rgba(var(--accent-rgb), .25); }
+.about-name { font-size: 26px; font-weight: 500; letter-spacing: .28em; } .about-name span { color: var(--faint); } .about-ver { color: var(--muted); font-size: 12px; margin-top: 3px; }
+.about-p { line-height: 1.65; margin: 4px 0 0; font-size: 12.5px; }
+.about-diag { display: flex; flex-direction: column; gap: 1px; margin-top: 6px; font-size: 11.5px; }
+.ad-row { display: grid; grid-template-columns: 190px 1fr; gap: 12px; padding: 5px 8px; border-radius: 8px; } .ad-row:nth-child(odd) { background: rgba(255, 255, 255, .03); } .ad-row span { color: var(--faint); } .ad-row b { font-weight: 500; word-break: break-word; }
+.changelog { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.cl { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); }
+.cl.latest { border-color: rgba(var(--accent-rgb), .45); background: rgba(var(--accent-rgb), .06); }
+.cl-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; } .cl-head b { font-size: 14px; } .cl-date { color: var(--faint); font-size: 11.5px; }
+.cl-tag { margin-left: auto; font-size: 10px; letter-spacing: .08em; text-transform: uppercase; padding: 2px 8px; border-radius: 99px; background: rgba(var(--accent-rgb), .25); color: var(--text); }
+.cl ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); line-height: 1.5; } .cl li::marker { color: var(--accent); }
+@media (max-width: 600px) { .ad-row { grid-template-columns: 1fr; gap: 0; } }

@@ -48,7 +48,7 @@
     try {
       await post({
         name: v.name.trim(), subject: '[ulyOS] ' + v.subject.trim(),
-        message: v.message.trim() + (v.reply.trim() ? '\n\nReply-to: ' + v.reply.trim() : '') + '\n\n— sent from ' + location.host + location.pathname,
+        message: v.message.trim() + (v.reply.trim() ? '\n\nReply-to: ' + v.reply.trim() : '') + '\n\n— sent from ulyOS v' + (ulyOS.version || '?') + ' · ' + location.host + location.pathname,
       });
       ui.toast('Message sent to the admin ✓', { type: 'ok' });
       ulyOS.audit('Contact Admin: message sent', 'ok');
@@ -73,7 +73,7 @@
         'Protected: ' + (profile.protected ? 'yes (' + profile.cred + ')' : 'no'),
         'Contact email (optional, typed by the user): ' + (extra.contact || '—'),
         'Time: ' + new Date().toISOString(),
-        'Site: ' + location.host + location.pathname,
+        'Site: ' + location.host + location.pathname + ' (ulyOS v' + (ulyOS.version || '?') + ')',
         'Language / time zone: ' + (navigator.language || '') + ' / ' + tz,
         '',
         'No passwords, keys, files or app data are ever included.',

@@ -387,6 +387,7 @@
       { label: 'System Settings…', icon: 'settings', action: () => API().openSettings() },
       { label: 'Task Manager', icon: 'activity', action: () => API().SYS_APPS.taskmgr.open() }, { separator: true },
       { label: 'Lock Screen', icon: 'lock', action: API().lockNow },
+      { label: 'Purge memory now', icon: 'trash', action: () => ulyOS.purge.now('manual') },
       { label: 'Switch Profile…', icon: 'power', action: () => ulyOS.security.signOut() },
       { label: 'Restart…', icon: 'refresh', danger: true, action: () => API().restart() },
     ]);

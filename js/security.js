@@ -128,6 +128,46 @@
     const n = (plain[0] << 8) | plain[1];
     return { name: dec.decode(plain.slice(2, 2 + n)), data: plain.slice(2 + n) };
   }
+  /* ------------------------------------------------------------------------
+     Purge memory — wipes typed / generated secrets and the clipboard.
+     Runs on demand, when idle, and when the tab is hidden (see Settings → Security).
+     ------------------------------------------------------------------------ */
+  const holders = new Set();
+  let lastAct = Date.now(), clipTimer = 0;
+  const pref = (k, d) => { try { const v = ulyOS.settings && ulyOS.settings.get(k); return v == null ? d : v; } catch { return d; } };
+  ulyOS.clip = {
+    /** Copy text, then overwrite the clipboard after the configured delay. */
+    async copy(text) {
+      await navigator.clipboard.writeText(text);
+      clearTimeout(clipTimer);
+      const sec = +pref('clipClear', 30);
+      if (sec > 0) clipTimer = setTimeout(() => ulyOS.clip.clear(), sec * 1000);
+    },
+    clear() { clearTimeout(clipTimer); try { navigator.clipboard.writeText(' ').catch(() => {}); } catch { /* ignore */ } },
+  };
+  ulyOS.purge = {
+    register(hold) { holders.add(hold); return () => holders.delete(hold); },
+    holding: () => [...holders].some((x) => { try { return x.holding(); } catch { return false; } }),
+    now(reason) {
+      let n = 0;
+      holders.forEach((x) => { try { if (x.wipe(reason)) n++; } catch { /* ignore */ } });
+      if (reason !== 'tab hidden') ulyOS.clip.clear();
+      if (ulyOS.FS) ulyOS.FS.clipboard = null;
+      if (ulyOS.security && ulyOS.security.profile && ulyOS.security.profile()) ulyOS.audit('Memory purged (' + (reason || 'manual') + ') — ' + n + ' secret field(s) wiped, clipboard cleared', 'warn');
+      if (!reason || reason === 'manual' || reason === 'idle') {
+        ulyOS.ui.toast('Memory purged — typed secrets and the clipboard were wiped', { type: 'ok' });
+        if (ulyOS.fx) ulyOS.fx.sound('purge');
+      }
+      return n;
+    },
+  };
+  ['pointerdown', 'keydown', 'pointermove', 'wheel', 'touchstart'].forEach((e) => document.addEventListener(e, () => { lastAct = Date.now(); }, { capture: true, passive: true }));
+  setInterval(() => {
+    const sec = +pref('purgeIdle', 120);
+    if (sec > 0 && ulyOS.purge.holding() && Date.now() - lastAct >= sec * 1000) { ulyOS.purge.now('idle'); lastAct = Date.now(); }
+  }, 5000);
+  document.addEventListener('visibilitychange', () => { if (document.hidden && pref('purgeOnHide', true) && ulyOS.purge.holding()) ulyOS.purge.now('tab hidden'); });
+
   ulyOS.crypto = { b64, rand, deriveKey, strength, generatePassword, generatePin, crackTime, encryptFile, decryptFile, ITER, hasCrypto };
 
   /* ------------------------------------------------------------------------
@@ -391,18 +431,36 @@
       }
       pw.type = 'text'; pw2.type = 'text'; eye.textContent = 'Hide'; paint(); o.onChange?.();
     } });
+    let copied = false;
     const copyBtn = h('button', { type: 'button', class: 'btn sm', html: icon('copy', 13) + ' Copy', onclick: async () => {
       if (!pw.value) return;
-      try { await navigator.clipboard.writeText(pw.value); ui.toast('Copied — store it in a password manager', { type: 'ok', timeout: 2200 }); } catch { pw.select(); ui.toast('Press Ctrl/Cmd+C to copy', { type: 'info' }); }
+      try { await ulyOS.clip.copy(pw.value); copied = true; const s = +pref('clipClear', 30); ui.toast('Copied — store it in a password manager' + (s ? ' (clipboard clears in ' + s + 's)' : ''), { type: 'ok', timeout: 2600 }); } catch { pw.select(); ui.toast('Press Ctrl/Cmd+C to copy', { type: 'info' }); }
     } });
+    /** Wipe this field from memory: values, generated state and (if we copied it) the clipboard. */
+    const wipe = (reason) => {
+      const had = !!(pw.value || pw2.value);
+      pw.value = ''; pw2.value = ''; generated = null; pw.type = 'password'; pw2.type = 'password'; eye.textContent = 'Show';
+      if (copied) { ulyOS.clip.clear(); copied = false; }
+      paint();
+      return had;
+    };
+    const purgeBtn = h('button', { type: 'button', class: 'btn sm danger', html: icon('trash', 13) + ' Purge', title: 'Don’t want this one? Wipe it (and the clipboard) from memory', onclick: () => {
+      const had = wipe('manual');
+      ui.toast(had ? 'Purged — nothing is kept in memory' : 'Nothing to purge', { type: had ? 'ok' : 'info', timeout: 2000 });
+      if (had && ulyOS.fx) ulyOS.fx.sound('purge');
+      pw.focus();
+    } });
+    const offHold = ulyOS.purge.register({ holding: () => !!(pw.value || pw2.value), wipe });
     const gen = h('div', { class: 'gen' },
       h('div', { class: 'gen-row' }, h('span', { class: 'gen-lbl', text: 'Length' }), len, lenOut),
-      optsRow, h('div', { class: 'btn-row' }, genBtn, copyBtn));
+      optsRow, h('div', { class: 'btn-row' }, genBtn, copyBtn, purgeBtn),
+      h('div', { class: 'w-sub gen-note', text: 'Secrets are wiped automatically when you go idle or switch tabs (Settings → Security → Memory).' }));
     pw.addEventListener('input', () => { if (mode === 'pin') { pw.value = pw.value.replace(/\D/g, ''); } if (generated && generated.value !== pw.value) generated = null; paint(); o.onChange?.(); });
     pw2.addEventListener('input', () => { if (mode === 'pin') pw2.value = pw2.value.replace(/\D/g, ''); });
     const api = {
       el: h('div', { class: 'pwc' }, h('div', { class: 'row-between' }, h('span', { class: 'field-label', text: 'Secret' }), eye), pw, pw2, meter, info, crack, gen),
-      value: () => pw.value, confirm: () => pw2.value, focus: () => pw.focus(),
+      value: () => pw.value, confirm: () => pw2.value, focus: () => pw.focus(), purge: wipe,
+      dispose() { offHold(); wipe('closed'); },
       setMode(m) {
         mode = m; pw.value = ''; pw2.value = ''; generated = null; pw.type = 'password'; pw2.type = 'password'; eye.textContent = 'Show';
         pw.placeholder = m === 'pin' ? 'PIN (digits)' : 'Password'; pw.inputMode = m === 'pin' ? 'numeric' : 'text'; pw2.inputMode = pw.inputMode;
@@ -426,6 +484,8 @@
 
   function showAuth(view) {
     const el = authEl();
+    const prevView = el.querySelector('.auth-card') && el.querySelector('.auth-card').firstElementChild;
+    if (prevView && prevView._dispose) prevView._dispose();   // wipe secrets typed on the screen we are leaving
     el.hidden = false;
     document.body.classList.add('auth-open');
     const card = h('div', { class: 'auth-card' }, view);
@@ -437,6 +497,8 @@
   }
   function hideAuth() {
     const el = authEl();
+    const prevView = el.querySelector('.auth-card') && el.querySelector('.auth-card').firstElementChild;
+    if (prevView && prevView._dispose) prevView._dispose();
     el.classList.add('out');
     setTimeout(() => { el.hidden = true; el.classList.remove('out'); el.replaceChildren(); document.body.classList.remove('auth-open'); }, dur(350));
   }
@@ -597,6 +659,7 @@
         first ? null : h('button', { type: 'button', class: 'link', onclick: () => showAuth(pickView()), text: '← All profiles' }),
         h('button', { type: 'button', class: 'link', onclick: () => showAuth(importView(first)), text: 'Import encrypted backup…' })));
     credSeg(); paintSw(); paintPrev();
+    form._dispose = () => pwc.dispose();
     return form;
   }
 

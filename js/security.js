@@ -511,28 +511,6 @@
     catch { throw new Error('Wrong password or corrupted backup'); }
   }
 
-  /* ------------------------------------------------------------------------
-     Embedded-app storage shim: each app's localStorage is redirected into the
-     signed-in profile's vault under "app:<id>:" so it is encrypted at rest and
-     separated per profile.
-     ------------------------------------------------------------------------ */
-  function injectShim(html, appId) {
-    const ns = JSON.stringify('app:' + appId + ':');
-    const shim = '<script>(function(){try{var P=parent.ulyOS;if(!P||!P.vault)return;var ns=' + ns + ';' +
-      'function mine(){return P.vault.keys().filter(function(k){return k.indexOf(ns)===0})}' +
-      'var api={getItem:function(k){return P.vault.get(ns+k)},setItem:function(k,v){P.vault.set(ns+k,String(v))},removeItem:function(k){P.vault.remove(ns+k)},' +
-      'clear:function(){mine().forEach(function(k){P.vault.remove(k)})},key:function(i){var a=mine();return a[i]==null?null:a[i].slice(ns.length)}};' +
-      'var st=new Proxy(api,{get:function(t,k){if(k==="length")return mine().length;if(k in t)return t[k];if(typeof k==="string")return t.getItem(k)},' +
-      'set:function(t,k,v){t.setItem(k,v);return true},deleteProperty:function(t,k){t.removeItem(k);return true}});' +
-      'Object.defineProperty(window,"localStorage",{configurable:true,get:function(){return st}});' +
-      'var last=0;function ping(){var n=Date.now();if(n-last>4000){last=n;try{P.security.ping()}catch(e){}}}' +
-      '["pointerdown","keydown","wheel"].forEach(function(e){addEventListener(e,ping,{passive:true,capture:true})});' +
-      '}catch(e){console.warn("ulyOS storage shim failed",e)}})();<\/script>';
-    const m = /<head[^>]*>/i.exec(html);
-    return m ? html.slice(0, m.index + m[0].length) + shim + html.slice(m.index + m[0].length) : shim + html;
-  }
-
-
   /* ==========================================================================
      Reusable password / PIN field with generator, live length + entropy meter
      ========================================================================== */
@@ -891,7 +869,6 @@
      ------------------------------------------------------------------------ */
   ulyOS.security = {
     ping,
-    injectShim,
     profile: () => (S ? { ...S.profile } : null),
     profileId: () => S?.profile.id || null,
     isProtected: () => true,

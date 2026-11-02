@@ -552,23 +552,23 @@
   const IFRAME_ALLOW = 'clipboard-read; clipboard-write; fullscreen; autoplay; encrypted-media; picture-in-picture; microphone; camera; display-capture; accelerometer; gyroscope';
 
   /** Build the chrome-less iframe application surface. */
-  function buildFrameApp(win, url, html) {
+  function buildFrameApp(win, url, html, localSrc) {
     const t0 = performance.now();
     const loader = h('div', { class: 'frame-loader' },
       h('div', { class: 'spinner' }),
       h('div', { class: 'frame-hint', text: 'Loading ' + safeHost(url) + '…' }));
     const iframe = h('iframe', { class: 'app-frame', title: win.title, referrerPolicy: 'no-referrer-when-downgrade' });
-    const local = html != null;
+    const local = html != null || !!localSrc;
     if (local) iframe.dataset.local = '1';
     iframe.setAttribute('allow', IFRAME_ALLOW);
     /* Third-party sites run sandboxed: no top-level navigation (a framed site cannot redirect ulyOS itself),
-       no access to ulyOS. Bundled local apps (srcdoc) are trusted and unsandboxed. */
+       no access to ulyOS. Bundled local apps are same-origin documents of their own (own CSP, no inline script) and are trusted. */
     if (!local) iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-pointer-lock allow-presentation allow-storage-access-by-user-activation');
     iframe.setAttribute('allowfullscreen', '');
     const reload = () => {
       loader.classList.remove('done', 'slow');
       loader.querySelector('.frame-hint').textContent = 'Reloading…';
-      if (local) { iframe.srcdoc = html; arm(); return; }
+      if (local) { if (localSrc) { iframe.src = 'about:blank'; setTimeout(() => { iframe.src = localSrc; arm(); }, 40); } else { iframe.srcdoc = html; arm(); } return; }
       const s = iframe.src;
       iframe.src = 'about:blank';
       setTimeout(() => { iframe.src = s; arm(); }, 40);
@@ -603,7 +603,7 @@
     const stage = h('div', { class: 'frame-stage' }, iframe, loader, note);
     win.iframe = iframe;
     // attach first, then navigate (so `load` always fires on a connected frame)
-    win._startFrame = () => { if (local) iframe.srcdoc = html; else iframe.src = url; arm(); };
+    win._startFrame = () => { if (localSrc) iframe.src = localSrc; else if (local) iframe.srcdoc = html; else iframe.src = url; arm(); };
     return h('div', { class: 'frame-app' }, bar, stage);
   }
   function safeHost(u) { try { return new URL(u).host; } catch { return u; } }
@@ -658,9 +658,9 @@
     win.el = el; win.body = body; win.titlebar = titlebar;
 
     // content
-    if (opts.url || opts.html != null) {
-      win.local = opts.html != null;
-      body.append(buildFrameApp(win, opts.url || 'local app · ' + win.title, opts.html));
+    if (opts.url || opts.html != null || opts.src) {
+      win.local = opts.html != null || !!opts.src;
+      body.append(buildFrameApp(win, opts.url || 'local app · ' + win.title, opts.html, opts.src));
       el.classList.add('has-iframe');
     } else if (typeof opts.render === 'function') {
       // appended before render so render() can measure/focus
@@ -671,7 +671,7 @@
     el.style.zIndex = ++zCounter;
     registry.set(win.id, win);
 
-    if (!opts.url && opts.html == null && typeof opts.render === 'function') {
+    if (!opts.url && opts.html == null && !opts.src && typeof opts.render === 'function') {
       const node = opts.render(win);
       if (node) body.append(node);
     } else if (opts.content) {

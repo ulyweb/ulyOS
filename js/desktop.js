@@ -293,21 +293,19 @@
     if (ic.glyph) return icon(ic.glyph, size);
     const letter = escapeHtml((ic.name || '?').trim().charAt(0).toUpperCase());
     const fav = settings.favicons && ic.url
-      ? '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostName(ic.url)) + '&sz=64" alt="" referrerpolicy="no-referrer" onerror="this.remove()">' : '';
+      ? '<img src="https://www.google.com/s2/favicons?domain=' + encodeURIComponent(hostName(ic.url)) + '&sz=64" alt="" referrerpolicy="no-referrer" data-favicon="1">' : '';
     return '<span class="letter-ico" style="--h:' + hueOf(hostName(ic.url || ic.name)) + ';width:' + size + 'px;height:' + size + 'px;font-size:' + Math.round(size * 0.62) + 'px">' + letter + fav + '</span>';
   }
+
+  // a favicon that fails to load simply disappears (replaces an inline onerror, which the CSP forbids)
+  document.addEventListener('error', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.dataset && t.dataset.favicon) t.remove(); }, true);
 
   async function launch(ic) {
     if (ic.kind === 'sys') { SYS_APPS[ic.sys].open(); return; }
     if (ic.kind === 'local') {
       const existing = WM.byApp('web:' + ic.id)[0];
       if (existing) { WM.focus(existing); return; }
-      try {
-        const r = await fetch(ic.file);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const html = ulyOS.security.injectShim(await r.text(), ic.id);   // storage → encrypted profile vault
-        WM.open({ appId: 'web:' + ic.id, title: ic.name, icon: iconHTML(ic, 16), html, width: ic.w || 1000, height: ic.h || 700, mem: ic.mem, singleton: true });
-      } catch (err) { ui.toast("Could not load '" + ic.name + "': " + err.message + ' (serve ulyOS over http://, not file://)', { type: 'err' }); }
+      WM.open({ appId: 'web:' + ic.id, title: ic.name, icon: iconHTML(ic, 16), src: ic.file, width: ic.w || 1000, height: ic.h || 700, mem: ic.mem, singleton: true });
       return;
     }
     const target = embedUrl(ic.url);

@@ -3,8 +3,14 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.20.0';
+ulyOS.version = '1.21.0';
 ulyOS.CHANGELOG = [
+  { v: '1.21.0', d: '2026-11-03', n: [
+    'Jarvis → Hands: a webcam hand-tracking board built into ulyOS. Pinch and drag glass cards, tap to close, flick to throw, resize with two hands, clap to sweep the board clean. A ring shows whether your assistant is idle, listening, thinking or speaking. Notes and images become cards, and cards also work with a mouse or finger. Hand tracking is Google MediaPipe, bundled and run on your device',
+    'Your assistant now has tools: it can search and read your notes, add to them (it asks first, on screen or by saying yes / no) and put things on the Hands board when you ask to see something',
+    'More voice commands: compact the session, switch to the deep model / back to the fast model, usage report, stop asking for permission (then confirm), start asking again. New options: resume the last conversation, a thinking sound, and fast or deep model',
+    'Security policy: script-src gains wasm-unsafe-eval (WebAssembly only) for hand tracking; JavaScript eval stays blocked and is still tested',
+  ] },
   { v: '1.20.0', d: '2026-11-03', n: [
     'Jarvis AI assistant toolkit (Apps folder), inspired by Jared Rhodenizer\'s open fullstack-agent: a memory vault of Markdown notes in encrypted Files (daily notes, links, backlinks, search, jobs), a voice conversation through Gemini Live with your agent\'s name, personality and memory, four animated faces that follow the conversation, push-to-talk and voice commands',
     'Jarvis → Stack: install commands for the original stack, a check for his face and hands servers on this computer, and one-click windows for the real barehands (webcam hand tracking) and face when they are running. The security policy allows only 127.0.0.1 / localhost for this',

@@ -14,9 +14,9 @@ test('the shell policy has no unsafe-inline for scripts and the page has no inli
     inline: [...document.scripts].filter((s) => !s.src).length,
     handlers: [...document.querySelectorAll('*')].filter((e) => [...e.attributes].some((a) => /^on/i.test(a.name))).length,
   }));
-  expect(r.csp).toMatch(/script-src 'self';/);
+  expect(r.csp).toMatch(/script-src 'self' 'wasm-unsafe-eval';/);   // exactly: own files + WebAssembly (hand tracking); nothing else may run as script
   expect(r.csp).not.toMatch(/script-src[^;]*unsafe-inline/);
-  expect(r.csp).not.toMatch(/unsafe-eval/);
+  expect(r.csp).not.toMatch(/(?<!wasm-)unsafe-eval/);   // WebAssembly only ('wasm-unsafe-eval' for hand tracking); JavaScript eval stays blocked
   expect(r.inline).toBe(0);
   expect(r.handlers).toBe(0);
   // an injected inline script / handler must not run
@@ -42,7 +42,7 @@ for (const [id, name] of APPS) {
     const info = await fr.evaluate(() => ({ csp: document.querySelector('meta[http-equiv=Content-Security-Policy]')?.content || '', inlineNoHash: [...document.scripts].filter((s) => !s.src).length, title: document.title }));
     expect(info.csp).toContain("default-src 'none'");
     expect(info.csp).not.toMatch(/script-src[^;]*unsafe-inline/);
-    expect(info.csp).not.toMatch(/unsafe-eval/);
+    expect(info.csp).not.toMatch(/(?<!wasm-)unsafe-eval/);
     // storage goes to the profile vault (app writes its own state on first load)
     await fr.evaluate(() => localStorage.setItem('probe', '1'));
     expect(await page.evaluate((id) => ulyOS.vault.get('app:' + id + ':probe'), id)).toBe('1');

@@ -32,6 +32,7 @@
   const DEF = {
     name: 'Jarvis', you: '', greeting: '', voice: '', face: 'board', useMemory: true, ptt: false, pttKey: 'Space',
     personality: 'You are calm, warm and quietly witty, like a trusted chief of staff. You are direct, you keep answers short enough to say out loud, and you ask one clarifying question when something is ambiguous. You are honest when you do not know something.',
+    permission: 'ask', model: 'fast', resume: false, thinkingSound: true,
     ports: { face: 8790, hands: 8794 },
   };
   const clean = (o) => {
@@ -43,7 +44,8 @@
     c.voice = String(c.voice || '').slice(0, 40);
     if (!FACES.some((f) => f[0] === c.face)) c.face = DEF.face;
     if (!PTT_KEYS.some((k) => k[0] === c.pttKey)) c.pttKey = DEF.pttKey;
-    c.useMemory = c.useMemory !== false; c.ptt = !!c.ptt;
+    c.useMemory = c.useMemory !== false; c.ptt = !!c.ptt; c.resume = !!c.resume; c.thinkingSound = c.thinkingSound !== false;
+    if (c.permission !== 'auto') c.permission = 'ask'; if (c.model !== 'deep') c.model = 'fast';
     const pn = (v, d) => { v = Math.round(+v); return v >= 1024 && v <= 65535 ? v : d; };
     c.ports = { face: pn(c.ports && c.ports.face, 8790), hands: pn(c.ports && c.ports.hands, 8794) };
     return c;
@@ -51,6 +53,7 @@
   const cfg = () => { try { return clean(JSON.parse(ulyOS.vault.get(KEY) || '{}')); } catch { return clean({}); } };
   const save = (patch) => { const c = clean({ ...cfg(), ...patch }); ulyOS.vault.set(KEY, JSON.stringify(c)); return c; };
   J.config = cfg;
+  const MODELS = { fast: 'gemini-live-2.5-flash-preview', deep: 'gemini-2.5-flash-native-audio-preview-09-2025' };
   const greetingOf = (c) => c.greeting || ('Hello' + (c.you ? ' ' + c.you : '') + ', what are we working on today?');
 
   /* ======================================================================
@@ -127,6 +130,15 @@
     if (mem) parts.push('Private notes from the user\'s memory vault. Use them naturally and do not recite them:\n' + mem);
     return parts.join('\n\n').slice(0, 3900);
   }
+
+  /** What the assistant may do on its own: look things up in the notes, write to them (asking first) and use the board. */
+  const TOOLS = [
+    { name: 'search_notes', description: 'Search the user\'s memory notes. Returns up to 5 matching note paths with a short snippet.', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING' } }, required: ['query'] } },
+    { name: 'read_note', description: 'Read one memory note by its path, for example "Projects/Plan.md".', parameters: { type: 'OBJECT', properties: { path: { type: 'STRING' } }, required: ['path'] } },
+    { name: 'write_note', description: 'Create a memory note or add to one. The app asks the user for permission first.', parameters: { type: 'OBJECT', properties: { path: { type: 'STRING' }, content: { type: 'STRING' }, mode: { type: 'STRING', enum: ['append', 'replace'] } }, required: ['path', 'content'] } },
+    { name: 'present', description: 'Put something on the user\'s Hands board so they can see it. Use it whenever the user asks to see something.', parameters: { type: 'OBJECT', properties: { title: { type: 'STRING' }, body: { type: 'STRING' } }, required: ['title', 'body'] } },
+    { name: 'get_board', description: 'List the cards currently on the Hands board.' },
+  ];
 
   /* tiny, safe Markdown → DOM (no innerHTML) */
   function inline(text, onLink) {
@@ -272,12 +284,12 @@
     let tab = 'talk', session = null, poll = null, demo = null;
     const leave = {}, panes = {}, FN = {};
     const G = () => ulyOS.Gemini;
-    const names = [['talk', 'Talk'], ['memory', 'Memory'], ['agent', 'Agent'], ['stack', 'Stack']];
+    const names = [['talk', 'Talk'], ['hands', 'Hands'], ['memory', 'Memory'], ['agent', 'Agent'], ['stack', 'Stack']];
     /* The Talk pane is built once and only hidden, so a running conversation survives tab switches; the others rebuild on entry. */
     const setTab = (t) => {
       if (leave[tab]) { try { leave[tab](); } catch { /* ignore */ } }
       tab = t; paintTabs();
-      if (t !== 'talk' || !panes.talk) { if (panes[t]) panes[t].remove(); panes[t] = h('div', { class: 'jv-tabpane' }); pane.append(panes[t]); FN[t](panes[t]); }
+      if ((t !== 'talk' && t !== 'hands') || !panes[t]) { if (panes[t]) panes[t].remove(); panes[t] = h('div', { class: 'jv-tabpane' }); pane.append(panes[t]); FN[t](panes[t]); }
       for (const k of Object.keys(panes)) panes[k].hidden = k !== t;
     };
     const paintTabs = () => tabs.replaceChildren(...names.map(([k, l]) => h('button', { class: tab === k ? 'active' : '', text: l, onclick: () => setTab(k) })));
@@ -307,15 +319,26 @@
         h('div', { class: 'jv-bar' }, go, holdBtn, faceSel, fullBtn, demoBtn, jobSel),
         h('div', { class: 'jv-bar' }, status, keyBtn),
         log, h('div', { class: 'jv-bar' }, text, saveBtn),
-        h('p', { class: 'set-desc', text: 'Voice by Gemini Live with your own API key. Say “go hands free” or “push to talk mode” to switch the microphone, or “clear the session” to start fresh. Your memory notes are shared with Google only while a conversation is running, and only the parts selected for it.' }));
+        h('p', { class: 'set-desc', text: 'Voice by Gemini Live with your own API key. Voice commands (say them alone): “go hands free”, “push to talk mode”, “clear the session”, “compact the session”, “switch to the deep model”, “back to the fast model”, “usage report”, “stop asking for permission”. Your memory notes are shared with Google only while a conversation is running, and only the parts selected for it.' }));
 
       const lines = []; let curMe = null, curAi = null, userTurn = '', awaiting = false, lastUser = 0, held = false;
       const addLine = (who, t) => { const row = h('div', { class: 'jv-line ' + who }, h('b', { text: who === 'me' ? (cfg().you || 'You') : cfg().name }), h('span', { text: t })); log.append(row); log.scrollTop = log.scrollHeight; return row; };
       const part = (who, t) => { let cur = who === 'me' ? curMe : curAi; if (!cur) { cur = addLine(who, ''); if (who === 'me') curMe = cur; else curAi = cur; lines.push([who, cur]); } cur.lastChild.textContent += t; log.scrollTop = log.scrollHeight; };
       const badge = stage.querySelector('.jv-badge');
-      const setState = (s) => { env.state = s; badge.textContent = s; badge.dataset.s = s; };
+      /* a soft pulsing tone while the assistant is thinking, so a pause never feels like a dead line */
+      const think = (() => {
+        let osc = null, gain = null;
+        return {
+          start() { const ctx = session && session.ctx; if (osc || !ctx || !cfg().thinkingSound) return; try { osc = ctx.createOscillator(); const lfo = ctx.createOscillator(), lg = ctx.createGain(); gain = ctx.createGain(); osc.type = 'sine'; osc.frequency.value = 196; lfo.frequency.value = 2.2; lg.gain.value = 0.012; gain.gain.value = 0.014; lfo.connect(lg); lg.connect(gain.gain); osc.connect(gain); gain.connect(ctx.destination); osc.start(); lfo.start(); osc._lfo = lfo; } catch { osc = null; } },
+          stop() { if (!osc) return; try { gain.gain.setTargetAtTime(0, osc.context.currentTime, 0.05); const o = osc; setTimeout(() => { try { o.stop(); o._lfo.stop(); } catch { /* ignore */ } }, 250); } catch { /* ignore */ } osc = null; },
+        };
+      })();
+      const setState = (s) => { if (s !== env.state) { if (s === 'thinking') think.start(); else think.stop(); } env.state = s; badge.textContent = s; badge.dataset.s = s; };
+      const rowsText = () => [...log.querySelectorAll('.jv-line')].map((r) => r.firstChild.textContent + ': ' + r.lastChild.textContent.replace(/\s+/g, ' ').trim().slice(0, 300)).filter((x) => x.length > 3);
+      const persistLast = () => { try { const r = rowsText().slice(-14); if (r.length) ulyOS.vault.set('ulyos.jarvis.last', JSON.stringify(r)); } catch { /* ignore */ } };
+      let t0 = 0, turns = 0, pendingAsk = null, pendingConfirm = null;
       const mute = (on) => { const tr = session && session.mic && session.mic.getAudioTracks()[0]; if (tr) tr.enabled = !on; };
-      const stop = () => { clearInterval(poll); poll = null; if (session) { const s = session; session = null; s.close(); } setState('idle'); env.level = 0; go.innerHTML = icon('mic', 15) + ' Start talking'; go.classList.remove('danger'); text.disabled = true; status.textContent = 'Not connected'; };
+      const stop = () => { think.stop(); persistLast(); clearInterval(poll); poll = null; if (session) { const s = session; session = null; s.close(); } setState('idle'); env.level = 0; go.innerHTML = icon('mic', 15) + ' Start talking'; go.classList.remove('danger'); text.disabled = true; status.textContent = 'Not connected'; };
       const tick = () => {
         const s = session; if (!s) return; let lvl = 0;
         if (s.an) { const d = new Uint8Array(s.an.frequencyBinCount); s.an.getByteFrequencyData(d); let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i]; lvl = Math.min(1, sum / d.length / 120); }
@@ -324,23 +347,72 @@
         else if (env.mic > 0.05 && !(cfg().ptt && !held)) { setState('listening'); env.level += (env.mic * 3 - env.level) * 0.4; }
         else { setState('idle'); env.level *= 0.85; }
       };
+      /* the voice console: exact phrases, spoken alone (like the originals) */
       const applyCommand = (said) => {
-        const t = norm(said);
+        const t = norm(said), cc = cfg();
+        if (pendingConfirm && t === 'confirm') { save({ permission: 'auto' }); pendingConfirm = null; ui.toast('Auto-approve is on: ' + cc.name + ' will no longer ask before writing notes', { type: 'ok', timeout: 3200 }); return; }
+        pendingConfirm = null;
         if (t === 'go hands free') { save({ ptt: false }); holdBtn.hidden = true; mute(false); ui.toast('Hands-free listening', { type: 'ok', timeout: 1600 }); }
         else if (t === 'push to talk mode') { save({ ptt: true }); holdBtn.hidden = false; mute(true); ui.toast('Push to talk: hold ' + (PTT_KEYS.find((k) => k[0] === cfg().pttKey) || ['', 'the key'])[1], { type: 'ok', timeout: 2400 }); }
-        else if (t === 'clear the session') { stop(); log.replaceChildren(); start(); }
+        else if (t === 'clear the session') { stop(); log.replaceChildren(); start({ fresh: true }); }
+        else if (t === 'compact the session') { const carry = rowsText().slice(-14).join('\n'); stop(); log.replaceChildren(); ui.toast('Session compacted: kept a short summary', { type: 'ok', timeout: 2200 }); start({ carry, fresh: true, quiet: true }); }
+        else if (t === 'switch to the deep model' || t === 'back to the fast model') { save({ model: t.includes('deep') ? 'deep' : 'fast' }); const carry = rowsText().slice(-14).join('\n'); stop(); ui.toast(t.includes('deep') ? 'Deep model' : 'Fast model', { type: 'ok', timeout: 1800 }); start({ carry, quiet: true }); }
+        else if (t === 'usage report') { const sec = Math.round((Date.now() - t0) / 1000); addLine('ai', 'This session: ' + turns + ' turns, ' + Math.floor(sec / 60) + ' min ' + (sec % 60) + ' s, ' + (cc.model === 'deep' ? 'deep' : 'fast') + ' model, permissions: ' + (cc.permission === 'auto' ? 'auto-approve' : 'ask first') + '.'); }
+        else if (t === 'stop asking for permission') { pendingConfirm = true; ui.toast('Say “confirm” to turn off the permission questions', { type: 'info', timeout: 4000 }); }
+        else if (t === 'start asking again') { save({ permission: 'ask' }); ui.toast('Permission questions are back on', { type: 'ok', timeout: 2000 }); }
       };
-      async function start() {
+      /* the assistant's tools: notes and the board. Writing asks first (on screen, or say yes / no). */
+      function askPermission(message) {
+        return new Promise((resolve) => {
+          const back = h('div', { class: 'modal-back', role: 'dialog', 'aria-label': 'Permission' });
+          const done = (v) => { pendingAsk = null; back.remove(); resolve(v); };
+          pendingAsk = { resolve: done };
+          back.append(h('div', { class: 'modal' }, h('h2', { text: 'Allow this?' }), h('p', { text: message }), h('p', { class: 'set-desc', text: 'Or say “yes” or “no”.' }),
+            h('div', { class: 'btn-row' }, h('button', { class: 'btn primary', text: 'Allow', onclick: () => done(true) }), h('button', { class: 'btn', text: 'Deny', onclick: () => done(false) }))));
+          document.body.append(back); back.querySelector('button').focus();
+        });
+      }
+      async function runTool(c) {
+        const a = c.args || {}, cc = cfg();
+        try {
+          if (c.name === 'search_notes') {
+            const list = await V.loadAll(), q = String(a.query || '').toLowerCase().slice(0, 80);
+            const hits = list.map((n) => { const t = V.cache.get(n.path) || '', i = t.toLowerCase().indexOf(q); return { n, i, score: (n.path.toLowerCase().includes(q) ? 2 : 0) + (i >= 0 ? 1 : 0), t }; }).filter((x) => q && x.score).sort((x, y) => y.score - x.score).slice(0, 5);
+            return { output: hits.map((x) => ({ path: x.n.path, snippet: x.t.slice(Math.max(0, x.i - 40), Math.max(0, x.i) + 160).replace(/\s+/g, ' ') })) };
+          }
+          if (c.name === 'read_note') { const t = await V.read(String(a.path || ''), true); return t == null ? { error: 'No such note' } : { output: t.slice(0, 3000) }; }
+          if (c.name === 'write_note') {
+            let path = safePath(String(a.path || '')); if (!path) return { error: 'Give a note path' }; if (!/\.md$/i.test(path)) path += '.md';
+            const mode = a.mode === 'replace' ? 'replace' : 'append', body = String(a.content || '').slice(0, 6000);
+            if (cc.permission !== 'auto') { const ok = await askPermission(cc.name + ' wants to ' + (mode === 'replace' ? 'replace the text of' : 'add to') + ' the note “' + path + '”:\n\n' + body.slice(0, 240)); if (!ok) return { error: 'The user said no. Do not retry; ask what they would prefer.' }; }
+            const old = mode === 'append' ? await V.read(path, true) : null;
+            await V.write(path, old != null ? old.replace(/\s*$/, '\n') + '\n' + body + '\n' : body); ui.toast('Note saved: ' + path, { type: 'ok', timeout: 2000 }); return { output: 'saved ' + path };
+          }
+          if (c.name === 'present' || c.name === 'get_board') {
+            if (!J.board) { J._setTab('hands'); await new Promise((r) => setTimeout(r, 120)); }
+            if (c.name === 'get_board') return { output: J.board.list() };
+            J._setTab('hands'); J.board.present({ title: a.title, body: a.body }); return { output: 'shown on the board' };
+          }
+          return { error: 'Unknown tool' };
+        } catch (e) { return { error: String((e && e.message) || e) }; }
+      }
+      const onToolCall = async (calls) => { const out = []; for (const c of calls) out.push({ id: c.id, name: c.name, response: await runTool(c) }); return out; };
+      async function start(opt = {}) {
         if (!G().hasKey()) { await G().keyDialog(paintKey)(); if (!G().hasKey()) return; }
         const cc = cfg(); go.disabled = true; status.textContent = 'Connecting…'; curMe = curAi = null; userTurn = '';
         try {
           const mem = cc.useMemory ? await memoryContext(jobSel.value) : '';
+          let carry = opt.carry || '';
+          if (!carry && cc.resume && !opt.fresh) { try { carry = (JSON.parse(ulyOS.vault.get('ulyos.jarvis.last') || '[]') || []).join('\n'); } catch { /* none */ } }
+          const brief = instruction(cc, mem + (carry ? '\n\nEarlier conversation (continue naturally, do not recite it):\n' + carry.slice(-1400) : '')) + '\n\nYou can search and read the user\'s notes, add to them (the app asks permission), and put things on their Hands board with the present tool.';
+          t0 = Date.now(); turns = 0;
           session = await G().live({
-            config: { persona: instruction(cc, mem), ...(cc.voice ? { voice: cc.voice } : {}) },
+            tools: TOOLS, onToolCall,
+            config: { persona: brief.slice(0, 3990), liveModel: MODELS[cc.model], ...(cc.voice ? { voice: cc.voice } : {}) },
             onState: (t) => { status.textContent = t; },
-            onInText: (t) => { curAi = null; part('me', t); userTurn += t; awaiting = true; lastUser = Date.now(); },
+            onInText: (t) => { curAi = null; part('me', t); userTurn += t; awaiting = true; lastUser = Date.now(); if (pendingAsk) { const w = norm(t); if (/^(yes|yes please|allow|go ahead|do it|sure)$/.test(w)) pendingAsk.resolve(true); else if (/^(no|no thanks|deny|stop|don t)$/.test(w)) pendingAsk.resolve(false); } },
             onOutText: (t) => { curMe = null; part('ai', t); },
-            onTurn: () => { awaiting = false; if (userTurn) applyCommand(userTurn); userTurn = ''; curMe = curAi = null; },
+            onTurn: () => { awaiting = false; turns++; if (userTurn) applyCommand(userTurn); userTurn = ''; curMe = curAi = null; },
             onLevel: (l) => { env.mic += (l - env.mic) * 0.5; },
             onError: (m) => { ui.toast(m, { type: 'err', timeout: 5000 }); status.textContent = m; },
             onClose: () => { if (session) stop(); },
@@ -348,7 +420,7 @@
           go.innerHTML = icon('stop', 15) + ' Stop'; go.classList.add('danger'); text.disabled = false; saveBtn.disabled = false; status.textContent = 'Connected as ' + cc.name;
           if (cc.ptt) mute(true);
           poll = setInterval(tick, 50);
-          session.sendText('Greet me out loud with exactly this sentence and nothing else: "' + greetingOf(cc).replace(/"/g, '') + '"');
+          if (!opt.quiet) session.sendText('Greet me out loud with exactly this sentence and nothing else: "' + greetingOf(cc).replace(/"/g, '') + '"');
         } catch (e) { stop(); ui.toast(e.message || String(e), { type: 'err', timeout: 6000 }); status.textContent = e.message || 'Could not connect'; }
         go.disabled = false;
       }
@@ -370,7 +442,17 @@
         demoBtn.textContent = 'Stop demo'; const seq = ['idle', 'listening', 'thinking', 'speaking']; let i = 0, n = 0;
         demo = setInterval(() => { n++; if (n % 40 === 1) i = (i + 1) % 4; setState(seq[i]); env.level = seq[i] === 'speaking' || seq[i] === 'listening' ? 0.25 + 0.5 * Math.abs(Math.sin(n * 0.4) * Math.sin(n * 0.13)) : 0.05; }, 50);
       });
-      J._dispose = () => { document.removeEventListener('keydown', kd); document.removeEventListener('keyup', ku); clearInterval(demo); demo = null; stop(); };
+      J._dispose = () => { if (J.board) { J.board.destroy(); J.board = null; } document.removeEventListener('keydown', kd); document.removeEventListener('keyup', ku); clearInterval(demo); demo = null; stop(); };
+    }
+
+    /* ---------------- Hands ---------------- */
+    function handsTab(pane) {
+      const stage = h('div', { class: 'jv-hands' });
+      pane.append(stage,
+        h('p', { class: 'set-desc', text: 'Move notes and images with your bare hands through the webcam (hand tracking by Google MediaPipe runs on this device and the video never leaves it). Tap the ring for the menu. Pinch to grab, flick to throw, use two hands to resize, clap to clear. Cards also work with a mouse or finger. Ask your assistant to “show me” something and it appears here.' }));
+      const openNote = async (l) => { try { await V.ensure(); const list = await V.list(), t = V.resolve(l, list); if (t) J.board.add({ title: t.name, body: await V.read(t.path) }); } catch { /* ignore */ } };
+      J.board = ulyOS.Hands.mount(stage, { state: () => env.state, render: renderMd, onLink: openNote });
+      J.board.add({ title: 'Welcome', body: 'Hello' + (cfg().you ? ' ' + cfg().you : '') + '. Start the camera, then pinch this card and move it. Tap the ring below for your notes.', x: 200, y: 130 });
     }
 
     /* ---------------- Memory ---------------- */
@@ -441,8 +523,12 @@
       const ptt = h('input', { type: 'checkbox', checked: c.ptt, 'aria-label': 'Push to talk' });
       const key = h('select', { class: 'input sm', 'aria-label': 'Talk key' }, PTT_KEYS.map(([k, l]) => h('option', { value: k, text: l, selected: k === c.pttKey })));
       const faceSel = h('select', { class: 'input sm', 'aria-label': 'Default face' }, FACES.map(([k, l]) => h('option', { value: k, text: l, selected: k === c.face })));
+      const perm = h('select', { class: 'input sm', 'aria-label': 'Permissions' }, [['ask', 'Ask me first (default)'], ['auto', 'Auto-approve']].map(([k, l]) => h('option', { value: k, text: l, selected: k === c.permission })));
+      const model = h('select', { class: 'input sm', 'aria-label': 'Model' }, [['fast', 'Fast'], ['deep', 'Deep']].map(([k, l]) => h('option', { value: k, text: l, selected: k === c.model })));
+      const resume = h('input', { type: 'checkbox', checked: c.resume, 'aria-label': 'Resume last conversation' });
+      const tsound = h('input', { type: 'checkbox', checked: c.thinkingSound, 'aria-label': 'Thinking sound' });
       const msg = h('div', { class: 'set-desc' });
-      const collect = () => ({ name: name.value, you: you.value, personality: pers.value, greeting: greet.value, voice: voice.value, useMemory: mem.checked, ptt: ptt.checked, pttKey: key.value, face: faceSel.value });
+      const collect = () => ({ name: name.value, you: you.value, personality: pers.value, greeting: greet.value, voice: voice.value, useMemory: mem.checked, ptt: ptt.checked, pttKey: key.value, face: faceSel.value, permission: perm.value, model: model.value, resume: resume.checked, thinkingSound: tsound.checked });
       pane.replaceChildren(h('div', { class: 'jv-form' },
         f('Agent name', name, 'What your assistant is called. It appears on the face and in conversations.'),
         f('Your name', you, 'Used in the spoken greeting.'),
@@ -450,6 +536,10 @@
         f('Greeting', greet, 'Spoken first when you start talking. Leave empty for “Hello <you>, what are we working on today?”'),
         f('Voice', voice), f('Default face', faceSel),
         f('Use my memory', mem, 'Shares your profile, recent daily notes and the chosen job with Gemini during a conversation.'),
+        f('Permissions', perm, 'Before your assistant writes to your notes it asks out loud or on screen. Say “stop asking for permission”, then “confirm”, to change it.'),
+        f('Model', model, 'Fast replies quickly; Deep thinks more. Say “switch to the deep model” or “back to the fast model”.'),
+        f('Resume last conversation', resume, 'Starts the next conversation knowing how the last one ended.'),
+        f('Thinking sound', tsound, 'A soft tone while it thinks, so a pause never feels like a dead line.'),
         f('Push to talk', ptt, 'The microphone stays closed until you hold the key or the on-screen button.'), f('Talk key', key),
         h('div', { class: 'btn-row' }, h('button', { class: 'btn primary', text: 'Save', onclick: () => { save(collect()); msg.textContent = 'Saved.'; } }),
           h('button', { class: 'btn', text: 'Reset to defaults', onclick: () => { ulyOS.vault.remove(KEY); setTab('agent'); } })), msg));
@@ -472,12 +562,12 @@
       const openLocal = (title, port, path) => WM.open({ appId: 'jarvis-local-' + port, title, icon: icon('sparkles', 16), width: 1000, height: 680, url: 'http://127.0.0.1:' + port + path });
       const card = (emoji, title, native, original, extra) => h('div', { class: 'jv-card' }, h('b', { text: emoji + ' ' + title }), h('p', {}, h('span', { class: 'jv-k', text: 'In ulyOS: ' }), native), h('p', {}, h('span', { class: 'jv-k', text: 'Original: ' }), original), extra || null);
       pane.replaceChildren(h('div', { class: 'jv-stack' },
-        h('p', { class: 'set-desc', text: 'Jarvis is an agent with a mind (memory), a mouth (voice), a face and optional hands. The idea and the open projects come from Jared Rhodenizer (jaredrhod.com). ulyOS has its own built-in version of each piece, and can also embed his originals when they run on this computer.' }),
+        h('p', { class: 'set-desc', text: 'Jarvis is an agent with a mind (memory), a mouth (voice), a face and optional hands. The idea and the open projects come from Jared Rhodenizer (jaredrhod.com). ulyOS has its own built-in version of each piece (Memory, Talk, the faces, Hands), and can also embed his originals when they run on this computer.' }),
         card('🧠', 'Mind — memory', 'the Memory tab: Markdown notes in your encrypted Files, daily notes, links, backlinks and jobs.', h('a', { href: REPO + 'ai-memory-vault', target: '_blank', rel: 'noopener noreferrer', text: 'ai-memory-vault' })),
         card('🗣️', 'Mouth — voice', 'the Talk tab: Gemini Live with your agent’s name, personality and memory; push to talk; voice commands.', h('span', {}, h('a', { href: REPO + 'backtalk', target: '_blank', rel: 'noopener noreferrer', text: 'backtalk' }), ' (talks to Claude Code with local speech models, needs install)')),
         card('🖥️', 'Face — visualizer', 'four animated faces on the Talk tab that react to the conversation.', h('a', { href: REPO + 'ai-visualizer', target: '_blank', rel: 'noopener noreferrer', text: 'ai-visualizer' }),
           h('div', { class: 'btn-row' }, chip('jv-face-chip'), h('button', { class: 'btn sm', text: 'Open original face', onclick: () => openLocal('Original face', c.ports.face, '/') }))),
-        card('🖐️', 'Hands — barehands (optional, webcam)', 'opens the real app inside ulyOS when it is running on this computer.', h('a', { href: REPO + 'barehands', target: '_blank', rel: 'noopener noreferrer', text: 'barehands' }),
+        card('🖐️', 'Hands — barehands (optional, webcam)', 'the Hands tab: a webcam hand-tracking board (pinch, throw, two-hand resize, clap) built into ulyOS. The real app can also open here when it runs on this computer.', h('a', { href: REPO + 'barehands', target: '_blank', rel: 'noopener noreferrer', text: 'barehands' }),
           h('div', { class: 'btn-row' }, chip('jv-hands-chip'), h('button', { class: 'btn sm', text: 'Open hands board', onclick: () => openLocal('Barehands', c.ports.hands, '/stage.html') }), h('button', { class: 'btn sm', text: 'Check again', onclick: check }))),
         h('h3', { text: 'Install the original stack on your computer' }),
         h('p', { class: 'set-desc', text: 'It needs Claude Code with a Claude subscription and sets up local speech models (about 1 GB). Run this in a terminal; it walks you through everything.' }),
@@ -490,7 +580,8 @@
       check();
     }
 
-    Object.assign(FN, { talk: talkTab, memory: memoryTab, agent: agentTab, stack: stackTab });
+    Object.assign(FN, { talk: talkTab, hands: handsTab, memory: memoryTab, agent: agentTab, stack: stackTab });
+    J._setTab = setTab;
     setTab('talk');
     return root;
   }

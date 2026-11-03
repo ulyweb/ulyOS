@@ -18,7 +18,7 @@ for (const f of files.filter((f) => f.endsWith('.html') && !f.startsWith('tools/
   const html = rd(f);
   const csp = (html.match(/Content-Security-Policy"\s+content="([^"]*)"/) || [])[1] || '';
   if (!csp) fail.push(f + ': no Content-Security-Policy');
-  if (/script-src[^;]*unsafe-(inline|eval)/.test(csp)) fail.push(f + ': script-src allows unsafe-inline/eval');
+  if (/script-src[^;]*unsafe-inline/.test(csp) || /script-src[^;]*(?<!wasm-)unsafe-eval/.test(csp)) fail.push(f + ': script-src allows unsafe-inline or unsafe-eval (only wasm-unsafe-eval is allowed)');
   const pinned = /script-src[^;]*'sha256-/.test(csp);
   for (const m of html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>/g)) if (!pinned) fail.push(f + ': inline <script> without a hash-pinned policy');
   if (/\son(click|change|input|keydown|keyup|submit|load|error)=["']/.test(html.replace(/<script[\s\S]*?<\/script>/g, ''))) fail.push(f + ': inline on*= handler in markup');

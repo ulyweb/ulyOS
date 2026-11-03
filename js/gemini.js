@@ -121,6 +121,7 @@
         generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: c.voice } } } },
         ...(c.persona ? { systemInstruction: { parts: [{ text: String(c.persona).slice(0, 4000) }] } } : {}),
         inputAudioTranscription: {}, outputAudioTranscription: {},
+        ...(o.tools && o.tools.length ? { tools: [{ functionDeclarations: o.tools }] } : {}),
       } });
     };
     ws.onerror = () => { o.onError && o.onError('The connection to Google failed (check the key, the model name and your network)'); };
@@ -129,6 +130,12 @@
     ws.onmessage = async (e) => {
       let m; try { m = JSON.parse(await textOf(e.data)); } catch { return; }
       if (m.setupComplete) { S._res(); return; }
+      if (m.toolCall && Array.isArray(m.toolCall.functionCalls)) {   // the model asks us to run a tool (Jarvis: memory notes, the board)
+        const calls = m.toolCall.functionCalls.slice(0, 4);
+        Promise.resolve(o.onToolCall ? o.onToolCall(calls) : []).catch((err) => calls.map((c) => ({ id: c.id, name: c.name, response: { error: String((err && err.message) || err) } })))
+          .then((functionResponses) => send({ toolResponse: { functionResponses: functionResponses || [] } }));
+        return;
+      }
       if (m.error) { const msg = (m.error.message || 'error').slice(0, 200); S._rej(new Error(msg)); o.onError && o.onError(msg); return; }
       const sc = m.serverContent; if (!sc) return;
       if (sc.interrupted) flush();

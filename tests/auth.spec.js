@@ -9,7 +9,7 @@ test('a password is mandatory: no opt-out, no PIN, weak passwords refused', asyn
   await page.goto('/index.html');
   await page.waitForSelector('.auth-form');
   await expect(page.locator('.check input')).toHaveCount(0);
-  await expect(page.locator('.seg')).toHaveCount(0);
+  await expect(page.locator('.seg button:has-text("PIN")')).toHaveCount(0);
   await page.fill('input[placeholder="Profile name"]', 'Alpha');
   await page.fill('.pwc input[placeholder="Password"]', 'short');
   await page.fill('.pwc input[placeholder="Confirm"]', 'short');

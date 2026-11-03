@@ -99,6 +99,7 @@
      Icon set (24px grid, stroke based)
      ------------------------------------------------------------------------ */
   const ICONS = {
+    pin: '<path d="M9 3h6l-1 6 3.5 3.5V14H6.5v-1.5L10 9z"/><path d="M12 14v7"/>',
     mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M9 21h6"/>',
     send: '<path d="M21 3L10.5 13.5"/><path d="M21 3l-6.5 18-4-8.5L2 8.5z"/>',
     store: '<path d="M5 8h14l-1 11a2 2 0 0 1-2 1.8H8A2 2 0 0 1 6 19z"/><path d="M9 8V6.5a3 3 0 0 1 6 0V8"/>',

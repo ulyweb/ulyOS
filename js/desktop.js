@@ -18,7 +18,7 @@
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
     cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '12', widgetsVisible: true,
-    cursorStyle: 'neon', cursorSize: 100, welcomeAlways: false, theme: 'dark', cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
+    cursorStyle: 'neon', cursorSize: 100, welcomeAlways: false, theme: 'dark', richIcons: true, widgetTheme: 'auto', cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // Telemetry FX (Settings → Effects)
     fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, depth: 50, sfx: true, sfxVolume: 35,
     // memory hygiene (Settings → Security)
@@ -62,7 +62,7 @@
   const LANDS = ulyOS.landscapes ? ulyOS.landscapes.list : [];
   const POOLS = { wallpaper: [...WALLPAPERS.map((w) => w[0]), ...LANDS.map((l) => 'land:' + l[0])], cursorStyle: ['classic', 'dot', 'cross', 'neon', 'ring', 'solid', 'target'], iconStyle: ICON_STYLES.map((i) => i[0]) };
   const rnd = (a) => a[Math.floor(Math.random() * a.length)];
-  const wpName = (id) => (id.startsWith('land:') ? (LANDS.find((l) => l[0] === id.slice(5)) || [0, id])[1] : (WALLPAPERS.find((w) => w[0] === id) || [0, id])[1]);
+  const wpName = (id) => (id.startsWith('photo:') ? ((ulyOS.landscapes.photos.find((p) => 'photo:' + p.key === id) || {}).label || id) : id.startsWith('land:') ? (LANDS.find((l) => l[0] === id.slice(5)) || [0, id])[1] : (WALLPAPERS.find((w) => w[0] === id) || [0, id])[1]);
   /* "random" settings resolve to one concrete pick that stays stable for the whole session */
   let eff = {};
   const val = (k) => (settings[k] === 'random' ? (eff[k] || (eff[k] = rnd(POOLS[k]))) : settings[k]);
@@ -117,6 +117,7 @@
     root.style.setProperty('--fstyle', s.fontStyle === 'italic' ? 'italic' : 'normal');
     document.body.dataset.widgets = s.widgetStyle === 'glass' ? 'glass' : 'vivid';
     applyTheme();
+    if (applySettings._rich !== s.richIcons) { const first = applySettings._rich === undefined; applySettings._rich = s.richIcons; if (!first && Desktop.ready) setTimeout(() => { Desktop.render(); ulyOS.Shell?.layout?.(); }, 0); }
     document.body.classList.toggle('no-anim', !s.animations);
     document.body.classList.toggle('no-blur', s.blur === 0);
     root.style.setProperty('--fx-aurora', (s.fxAurora / 100).toFixed(2));
@@ -127,6 +128,7 @@
     if (ulyOS.fx) ulyOS.fx.setTilt(s.fxTilt);
     Cursor.apply();
     document.body.dataset.icons = val('iconStyle') || 'glass';
+    document.body.dataset.rich = s.richIcons === false ? '0' : '1';
     ulyOS.anim.mode = s.animStyle || 'scale';
     const sz = ICON_SIZES[window.innerWidth < 520 ? 'small' : s.iconSize] || ICON_SIZES.medium;   // phones always use the compact grid
     const k = clamp((s.iconScale || 100) / 100, 0.5, 1.6);
@@ -147,6 +149,13 @@
     if (wpv.startsWith('land:')) {   // procedurally drawn nature landscape
       wp.className = 'wp-landscape';
       const u = ulyOS.landscapes && ulyOS.landscapes.url(wpv.slice(5));
+      if (u) wp.style.backgroundImage = 'url("' + u + '")';
+      return;
+    }
+    if (wpv.startsWith('photo:') && ulyOS.landscapes && ulyOS.landscapes.photoUrl) {   // a photograph, fetched on demand from Wikimedia Commons
+      wp.className = 'wp-landscape';
+      const px = Math.min(3840, (window.screen.width || 1920) * (window.devicePixelRatio || 1)), w = [1280, 1920, 2560, 3840].find((x) => x >= px) || 3840;
+      const u = ulyOS.landscapes.photoUrl(wpv.slice(6), w);
       if (u) wp.style.backgroundImage = 'url("' + u + '")';
       return;
     }
@@ -338,7 +347,9 @@
   const onDesk = (i) => !i.folder;
 
   /** Icon markup for an icon record (used by desktop tiles, taskbar, window chrome). */
+  const richOn = () => settings.richIcons !== false && ulyOS.richIcons;
   function iconHTML(ic, size = 16) {
+    if (richOn() && ulyOS.richIcons.has(ic.id) && ic.kind !== 'url-custom') return '<span class="rich-ico" style="width:' + size + 'px;height:' + size + 'px">' + ulyOS.richIcons.svg(ic.id) + '</span>';
     if (ic.kind === 'sys') return icon(SYS_APPS[ic.sys].icon, size);
     if (ic.glyph) return icon(ic.glyph, size);
     const letter = escapeHtml((ic.name || '?').trim().charAt(0).toUpperCase());
@@ -367,10 +378,7 @@
       const paint = () => {
         const kids = Desktop.icons.filter((i) => i.folder === f.id && (!q || i.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
         grid.replaceChildren(...(kids.length ? kids.map((ic) => {
-          const [g1, g2] = gradientOf(ic);
-          const el = h('button', { class: 'fld-item', title: ic.name },
-            h('div', { class: 'di-tile', style: { '--g1': g1, '--g2': g2, ...(ic.tint ? { '--tint': ic.tint } : {}) }, html: '<span class="glyph">' + iconHTML(ic, 28) + '</span>' }),
-            h('div', { class: 'di-label', text: ic.name }));
+          const el = h('button', { class: 'fld-item', title: ic.name }, tileEl(ic), h('div', { class: 'di-label', text: ic.name }));
           el.addEventListener('click', () => { launch(ic); ulyOS.audit("Launching '" + ic.name + "' from the " + f.name + ' folder', 'info'); });
           el.addEventListener('contextmenu', (e) => {
             e.preventDefault(); e.stopPropagation();
@@ -486,14 +494,20 @@
     paintSelection();
   };
 
-  function buildIcon(ic) {
-    const art = ART[ic.id];
+  /** The picture tile for an icon: full-colour artwork when available, otherwise the gradient tile with a glyph / letter. */
+  function tileEl(ic) {
+    const rich = richOn() && ulyOS.richIcons.has(ic.id);
+    const art = !rich && ART[ic.id];
     const [g1, g2] = gradientOf(ic);
-    const tile = h('div', {
-      class: 'di-tile' + (art ? ' has-art' : ''),
-      html: '<span class="glyph">' + (ic.kind === 'sys' || ic.glyph ? iconHTML(ic, 26) : iconHTML(ic, 30)) + '</span>' + (art ? '<span class="art">' + art + '</span>' : ''),
+    return h('div', {
+      class: 'di-tile' + (rich ? ' has-rich' : art ? ' has-art' : ''),
+      html: rich ? '<span class="rich-art">' + ulyOS.richIcons.svg(ic.id) + '</span>'
+        : '<span class="glyph">' + (ic.kind === 'sys' || ic.glyph ? iconHTML(ic, 30) : iconHTML(ic, 30)) + '</span>' + (art ? '<span class="art">' + art + '</span>' : ''),
       style: { '--g1': g1, '--g2': g2, ...(ic.tint ? { '--tint': ic.tint } : {}) },
     });
+  }
+  function buildIcon(ic) {
+    const tile = tileEl(ic);
     const el = h('div', { class: 'desk-icon', tabindex: 0, role: 'button', 'aria-label': ic.name, dataset: { id: ic.id } },
       tile, h('div', { class: 'di-label', text: ic.name }));
     el.addEventListener('dblclick', () => { el.classList.add('launching'); setTimeout(() => el.classList.remove('launching'), 1300); launch(ic); ulyOS.audit("Launching '" + ic.name + "' from desktop", 'info'); });
@@ -666,7 +680,7 @@
       { separator: true },
       { label: 'Surprise me  🎲', icon: 'sparkles', action: () => surprise(true) },
       { label: 'Wallpaper', icon: 'image', submenu: [{ label: (settings.wallpaper === 'random' ? '✓ ' : '    ') + '🎲 Random each sign-in', action: () => { Settings.set('wallpaper', 'random'); eff = {}; applyWallpaper(); } },
-        { label: 'Nature & landscapes', icon: 'image', submenu: LANDS.map(([id, l]) => ({ label: (settings.wallpaper === 'land:' + id ? '✓ ' : '    ') + l, action: () => { eff = {}; Settings.set('wallpaper', 'land:' + id); applyWallpaper(); } })) },
+        ...(((ulyOS.landscapes && ulyOS.landscapes.groups) || [['Nature & landscapes', LANDS]]).map(([title, items]) => ({ label: title, icon: 'image', submenu: items.map(([id, l]) => ({ label: (settings.wallpaper === 'land:' + id ? '✓ ' : '    ') + l, action: () => { eff = {}; Settings.set('wallpaper', 'land:' + id); applyWallpaper(); } })) }))),
         { separator: true }].concat(WALLPAPERS.map(([id, label]) => ({
         label: (settings.wallpaper === id ? '✓ ' : '    ') + label,
         action: () => { Settings.set('wallpaper', id); applyWallpaper(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
@@ -869,7 +883,11 @@
               : 'Anyone using this browser (and any page on this site’s origin) can read this profile’s data. Set a password to encrypt it.' }))),
         h('h3', { text: 'Profile' }),
         row('Name', null, h('div', { class: 'inline-form', style: { width: 'auto' } }, nameIn, h('button', { class: 'btn sm', text: 'Rename', onclick: () => { sec.rename(nameIn.value); paint(); } }))),
-        row('Color', null, swatches),
+        row('Picture', 'A letter, an emoji or your photo — shown on the sign-in screen and next to the clock', h('div', { class: 'btn-row' }, sec.avatarEl(p, 40), h('button', { class: 'btn sm', text: 'Change…', onclick: async () => {
+          const pk = sec.avatarPicker({ name: p.name, color: p.color, avatar: p.avatar });
+          const v = await ui.form({ title: 'Profile picture', fields: [{ name: 'pic', type: 'custom', node: pk.el, get: pk.get }], okText: 'Save' });
+          if (v) { sec.setPicture(v.pic); paint(); }
+        } }))),
         h('h3', { text: 'Lock & password' }),
         row('Change password', 'Re-wraps the vault key with a fresh salt. Passkeys and encrypted files keep working.',
           h('button', { class: 'btn sm primary', text: 'Change…', onclick: async () => {
@@ -952,6 +970,7 @@
     clampKey('fxAurora', 0, 100); clampKey('fxTilt', 0, 10); clampKey('fxGlow', 0, 100); clampKey('iconScale', 50, 160); clampKey('depth', 0, 100); clampKey('sfxVolume', 0, 100); clampKey('cursorSize', 50, 300); clampKey('clipClear', 0, 600); clampKey('purgeIdle', 0, 3600);
     clampKey('animSpeed', 0.25, 3); clampKey('blur', 0, 60); clampKey('glassAlpha', 0.3, 1); clampKey('taskbarSize', 36, 84);
     if ('theme' in out && !['dark', 'light', 'auto'].includes(out.theme)) delete out.theme;
+    if ('widgetTheme' in out && !(ulyOS.Widgets && ulyOS.Widgets.themes.some((t) => t[0] === out.widgetTheme))) delete out.widgetTheme;
     clampKey('fontSize', 10, 22);
     if ('fontFamily' in out && !FONTS.some((f) => f[0] === out.fontFamily)) delete out.fontFamily;
     if ('fontWeight' in out && ![300, 400, 500, 600, 700].includes(out.fontWeight)) delete out.fontWeight;
@@ -959,7 +978,7 @@
     if ('widgetStyle' in out && !['vivid', 'glass'].includes(out.widgetStyle)) delete out.widgetStyle;
     if ('cursorColor' in out && out.cursorColor !== '' && !HEX.test(out.cursorColor)) delete out.cursorColor;
     ['accent', 'wallpaperColor'].forEach((k) => { if (k in out && !HEX.test(out[k])) delete out[k]; });
-    if ('wallpaper' in out && !oneOf(out.wallpaper, [...POOLS.wallpaper, 'solid', 'custom', 'random'])) delete out.wallpaper;
+    if ('wallpaper' in out && !oneOf(out.wallpaper, [...POOLS.wallpaper, 'solid', 'custom', 'random']) && !(out.wallpaper.startsWith('photo:') && ulyOS.landscapes.photos.some((p) => 'photo:' + p.key === out.wallpaper))) delete out.wallpaper;
     if ('cursorStyle' in out && !oneOf(out.cursorStyle, [...CURSOR_STYLES.map((c) => c[0]), 'random'])) delete out.cursorStyle;
     if ('animStyle' in out && !oneOf(out.animStyle, [...ANIM_STYLES.map((c) => c[0]), 'random'])) delete out.animStyle;
     if ('iconStyle' in out && !oneOf(out.iconStyle, [...ICON_STYLES.map((c) => c[0]), 'random'])) delete out.iconStyle;
@@ -1102,16 +1121,28 @@
 
     /* wallpaper tiles */
     const tiles = h('div', { class: 'wp-list' });
-    const landTiles = h('div', { class: 'wp-list' });
+    const landTiles = h('div', {});
+    const photoBox = h('div', {});
+    const paintPhotos = (open) => {
+      const L = ulyOS.landscapes;
+      if (ulyOS.config.OFFLINE) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Photos are loaded from Wikimedia Commons, so they are not available in the offline build. The drawn space and anime-style scenes above work offline.' })); return; }
+      if (!open) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Genuine photographs from Cassini and Hubble (public domain / CC0). They are not stored in ulyOS: when you open this list or pick one, your browser fetches a resized copy from commons.wikimedia.org.' }), h('button', { class: 'btn sm', text: 'Show photos…', onclick: () => paintPhotos(true) })); return; }
+      photoBox.replaceChildren(h('div', { class: 'wp-list' }, L.photos.map((p) => h('button', {
+        class: 'wp-tile' + (settings.wallpaper === 'photo:' + p.key ? ' active' : ''), title: p.label + ' — ' + p.credit,
+        onclick: () => { eff = {}; Settings.set('wallpaper', 'photo:' + p.key); applyWallpaper(); paintPhotos(true); paintTiles(); ulyOS.audit("Wallpaper changed to photo '" + p.label + "' (" + p.credit + ')', 'info'); },
+      }, h('div', { class: 'wp-thumb', style: { backgroundImage: 'url("' + L.photoUrl(p.key, 320) + '")', backgroundSize: 'cover', backgroundPosition: 'center' } }), h('span', { text: p.label })))), h('p', { class: 'set-desc', text: 'Credits: NASA/JPL-Caltech/Cassini, NASA/ESA Hubble, and CC0 images on Wikimedia Commons.' }));
+    };
+    paintPhotos(settings.wallpaper.startsWith('photo:'));
     const paintTiles = () => {
       const randTile = h('button', {
         class: 'wp-tile rand' + (settings.wallpaper === 'random' ? ' active' : ''), title: 'A different wallpaper every sign-in',
         onclick: () => { Settings.set('wallpaper', 'random'); eff = {}; applyWallpaper(); paintTiles(); ulyOS.audit('Wallpaper set to random on each sign-in', 'info'); },
       }, h('div', { class: 'wp-thumb' }, '🎲'), h('span', { text: 'Random' }));
-      landTiles.replaceChildren(...LANDS.map(([id, label]) => h('button', {
+      const GROUPS = (ulyOS.landscapes && ulyOS.landscapes.groups) || [['Nature & landscapes', LANDS]];
+      landTiles.replaceChildren(...GROUPS.flatMap(([title, items]) => [h('h3', { text: title }), h('div', { class: 'wp-list' }, items.map(([id, label]) => h('button', {
         class: 'wp-tile' + (settings.wallpaper === 'land:' + id ? ' active' : ''), title: label,
-        onclick: () => { eff = {}; Settings.set('wallpaper', 'land:' + id); applyWallpaper(); paintTiles(); ulyOS.audit("Wallpaper changed to landscape '" + label + "'", 'info'); },
-      }, h('div', { class: 'wp-thumb', style: { backgroundImage: 'url("' + ulyOS.landscapes.url(id) + '")', backgroundSize: 'cover', backgroundPosition: 'center' } }), h('span', { text: label }))));
+        onclick: () => { eff = {}; Settings.set('wallpaper', 'land:' + id); applyWallpaper(); paintTiles(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
+      }, h('div', { class: 'wp-thumb', style: { backgroundImage: 'url("' + ulyOS.landscapes.url(id) + '")', backgroundSize: 'cover', backgroundPosition: 'center' } }), h('span', { text: label }))))]));
       tiles.replaceChildren(randTile, ...WALLPAPERS.map(([id, label]) => h('button', {
         class: 'wp-tile' + (settings.wallpaper === id ? ' active' : ''), title: label,
         onclick: () => { Settings.set('wallpaper', id); applyWallpaper(); paintTiles(); ulyOS.audit("Wallpaper changed to '" + label + "'", 'info'); },
@@ -1206,7 +1237,9 @@
           h('button', { class: 'btn', text: 'Shuffle wallpaper', onclick: () => { Settings.set('wallpaper', rnd(POOLS.wallpaper)); applyWallpaper(); paintTiles(); } })),
         row('Surprise me on every sign-in', 'Pick a fresh random wallpaper, accent, cursor, icon and animation style each time you sign in', sw('shuffleOnLogin')),
         h('h3', { text: 'Wallpaper' }), tiles,
-        h('h3', { text: 'Nature & landscapes' }), landTiles,
+        landTiles,
+        h('h3', { text: 'Real photos (NASA & public domain)' }),
+        photoBox,
         row('Solid color', 'Pick any flat background color', colorIn),
         row('Image from your computer', 'Stored in the sandbox filesystem (Wallpapers/)', h('button', { class: 'btn sm', html: icon('upload', 14) + ' Choose image…', onclick: () => fileIn.click() })),
         row('Image from URL', null, h('div', { class: 'inline-form' }, urlIn, h('button', { class: 'btn sm', text: 'Apply', onclick: () => {
@@ -1232,6 +1265,7 @@
       desktop: h('div', {},
         h('h3', { text: 'Icons' }),
         row('Icon size', null, seg('iconSize', ['small', 'medium', 'large'])),
+        row('Full-colour app icons', 'Detailed, multi-colour icons like a modern desktop system. Turn off to use the flat style chosen below for every icon', sw('richIcons', () => { Desktop.render(); ulyOS.Shell?.layout?.(); bus.emit('settings:change', { key: 'richIcons' }); })),
         row('Icon style', 'Look of the desktop icon tiles — “Random” picks one each sign-in', choose('iconStyle', ICON_STYLES, 'Random each sign-in')),
         row('Fetch website favicons', 'Custom shortcuts request a favicon from Google’s favicon service', sw('favicons', () => Desktop.render())),
         row('Auto-arrange', 'Pack icons into the grid from the top-left', h('button', { class: 'btn sm', text: 'Arrange now', onclick: autoArrange })),
@@ -1239,7 +1273,7 @@
         h('h3', { text: 'Clock' }),
         row('Show seconds in clock', null, sw('clockSeconds')),
         row('Time format', 'Applies to the taskbar / menu bar clock and the Clock widget', choose('clockFormat', [['24', '24-hour (military)'], ['12', '12-hour (AM/PM)']]))),
-      widgets: ulyOS.Widgets.settingsSection({ row, sw }),
+      widgets: ulyOS.Widgets.settingsSection({ row, sw, choose }),
       shell: ulyOS.Shell.settingsSection({ row, sw, range, choose }),
       security: securitySection(),
       sync: ulyOS.sync.settingsSection({ row }),

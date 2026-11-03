@@ -64,6 +64,12 @@ Settings → Sync. Settings, desktop layout, widgets and app data are packed int
 - Why browser voices cannot be saved: the page is never given the audio of the browser's own speech engine; the only trick is recording the tab while it plays, which needs “Share tab audio”. Gemini and the built-in voice produce audio data themselves, so they do not need it.
 - These features were tested against a simulated Google API (REST and WebSocket) in the automated tests; only you can check them against the real service with your key.
 
+## Look and widgets
+- **Icons**: full-colour hand-drawn app icons (`js/icons-rich.js`); Settings → Desktop → “Full-colour app icons” turns them off for the flat styles.
+- **Profile pictures**: letter, emoji or photo. The picture is stored with the profile name (not inside the encrypted vault) because the sign-in screen shows it; photos are cropped to 192 px on your device.
+- **Wallpapers**: nature, **space** and **anime-style** scenes are generated vector art (`js/landscapes.js`, `js/scenes.js`) — resolution-independent, offline, original (MIT with the project). The **real photos** section lists Cassini / Hubble images that were checked on Wikimedia Commons as public domain or CC0; they are not in the repository and are fetched (resized) from commons.wikimedia.org only after you open the list and pick one. The offline build cannot show them.
+- **Widgets**: Clock, Calendar, Notes, System, Crypto, Scoreboard, Headlines, Prediction markets, Timer, plus **Weather** (Open-Meteo, no key; contacts `api.open-meteo.com` and `geocoding-api.open-meteo.com` only while that widget exists), **To-do** (private — not exported), **World clocks**, **Moon** and **Device**. Pin a widget to lock its position; right-click → Theme or Settings → Widgets → Widget theme to recolor.
+
 ## Tests
 ```bash
 npm ci

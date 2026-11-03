@@ -27,7 +27,7 @@
     { target: () => q('#taskbar'), before: () => document.getElementById('taskbar')?.classList.add('reveal'), after: () => document.getElementById('taskbar')?.classList.remove('reveal'), title: 'Taskbar', text: 'Start menu, your pinned tools (Settings, Beam, Files, Task Manager) and every open window. Right-click any app to pin or unpin it. Prefer a floating dock or auto-hide? Settings → Dock & Menu bar.', icon: 'desktop' },
     { target: () => q('.desk-icon[data-id="apps"]'), title: 'The Apps folder', text: 'Files, Task Manager, Settings, QR Seal, System Vault, Crypto Compass and your shortcuts live here. Open it, search it, and right-click an app to move it back to the desktop or pin it to the taskbar. Apps you add from the App Store land here too.', icon: 'folder', action: { label: 'Open Apps folder', run: () => ulyOS.desktopApi.launch(appsFolder()) } },
     { target: () => dockItem('files'), title: 'Files', text: 'Your private sandbox: documents, pictures and downloads, stored encrypted in this browser. Create, rename, drag-and-drop and upload files, or mount a real folder from your computer with “Open folder…”. Right-click a file for Encrypt…, Download and more.', icon: 'folder' },
-    { target: () => q('.wgt') || q('#desktop'), title: 'Widgets', text: 'Clock, calendar, notes, system monitor, crypto prices, scoreboards, headlines and prediction markets. Right-click the desktop → Add widget. Drag to move, pull the bottom-right corner to resize. They stay pinned to the screen edge you put them against and re-pack themselves when the window changes size.', icon: 'layers' },
+    { target: () => q('.wgt') || q('#desktop'), title: 'Widgets', text: 'Clock, calendar, notes, system monitor, crypto prices, scoreboards, headlines and prediction markets. Right-click the desktop → Add widget (weather, to-do, world clocks, moon and more). Drag to move, pull the corner to resize, press the pin to lock one in place, and right-click → Theme to recolor it. Widgets stay against the screen edge you put them on and re-pack when the window changes size.', icon: 'layers' },
     { target: () => q('.desk-icon[data-id="speak"]'), title: 'Speak', text: 'Type or paste text and ulyOS reads it aloud. Pick a voice engine — browser voices, natural Gemini voices (whisper, calm, storyteller…) or a built-in offline voice — and save the speech as a .wav or .mp3 file.', icon: 'volume' },
     { target: () => q('.desk-icon[data-id="live"]'), title: 'Gemini Live', text: 'Have a spoken conversation with Google’s Gemini: press Start talking, speak, and it answers out loud while showing the transcript. You bring your own free API key; it stays encrypted in your profile and is never synced or exported.', icon: 'mic', action: { label: 'Open Gemini Live', run: () => ulyOS.Gemini.openLive() } },
     { target: () => q('.desk-icon[data-id="beam"]'), title: 'Beam', text: 'Send files, pictures, text or your settings between your PC and phone. Start on one device, Join on the other by scanning a QR code, check the same number shows on both, then drag files across. Direct and end-to-end encrypted — no server.', icon: 'send', action: { label: 'Open Beam', run: () => ulyOS.Beam.open() } },
@@ -114,19 +114,33 @@
     ulyOS.ui.closeMenu?.();
     const always = h('input', { type: 'checkbox', checked: !!API().Settings.get?.('welcomeAlways'), onchange: () => API().Settings.set('welcomeAlways', always.checked) });
     const enter = () => { ulyOS.vault.set(SEEN, '1'); closeWelcome(); };
+    const rich = (id) => (ulyOS.richIcons && ulyOS.richIcons.has(id) ? ulyOS.richIcons.svg(id) : '');
+    const FLOAT = [['live', 7, 4, 0], ['speak', 62, 3, 0.6], ['beam', 36, 22, 1.2], ['store', 5, 33, 0.3], ['files', 67, 31, 0.9], ['systemvault', 36, 44, 1.5]];   // all in the upper part so the title stays clear
+    const feat = (ico, c1, c2, t, d) => h('div', { class: 'wl-feat' }, h('div', { class: 'wl-fi', style: { background: 'linear-gradient(145deg,' + c1 + ',' + c2 + ')' }, html: icon(ico, 20) }), h('div', {}, h('b', { text: t }), h('p', { text: d })));
+    const name = (ulyOS.security.profile() && ulyOS.security.profile().name) || 'there';
     const el = h('div', { class: 'welcome', role: 'dialog', 'aria-label': 'Welcome to ulyOS' },
-      h('div', { class: 'welcome-card' },
-        h('div', { class: 'welcome-logo', html: '<svg viewBox="0 0 80 80" width="54" height="54"><circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="40" cy="40" r="5" fill="currentColor"/></svg>' }),
-        h('h1', { html: 'Welcome to uly<span>OS</span>' }),
-        h('div', { class: 'mono welcome-ver', text: 'version ' + ulyOS.version + ' · ' + (off() ? 'offline build' : 'online build') }),
-        h('p', { text: 'Hello, ' + (ulyOS.security.profile()?.name || 'there') + '. A private workspace that runs in your browser — files, tools, voice and widgets behind one password, encrypted on this device.' }),
-        h('ul', { class: 'welcome-why' }, [['🔒', 'Private by design', 'Encrypted at rest. No account, no server holding your data.'], ['🌐', 'Nothing to install', 'Any browser, any device, works offline.'], ['⚡', 'One workspace', 'Files, generators, Speak, Gemini Live and Beam together.']].map(([i, t, d]) => h('li', {}, h('span', { text: i }), h('div', {}, h('b', { text: t }), h('small', { text: d }))))),
-        h('div', { class: 'welcome-actions' },
-          h('button', { class: 'btn primary welcome-go', text: 'Enter ulyOS', onclick: enter }),
-          h('button', { class: 'btn', html: '🧭 Guided tour', onclick: () => { ulyOS.vault.set(SEEN, '1'); T.start(); } }),
-          h('button', { class: 'btn', text: 'Make it yours', onclick: () => { enter(); API().openSettings('appearance'); } })),
-        h('label', { class: 'welcome-opt' }, always, 'Show this welcome screen on every sign-in'),
-        h('div', { class: 'welcome-hint', text: 'Press Enter to start · Esc to close · Help → Guided tour to replay' })));
+      h('div', { class: 'wl-card' },
+        h('div', { class: 'wl-hero' },
+          h('div', { class: 'wl-orb o1' }), h('div', { class: 'wl-orb o2' }),
+          h('div', { class: 'wl-float' }, FLOAT.map(([id, x, y, d]) => h('span', { class: 'wl-ico', style: { left: x + '%', top: y + '%', animationDelay: d + 's' }, html: rich(id) }))),
+          h('div', { class: 'wl-brand' },
+            h('div', { class: 'wl-logo', html: '<svg viewBox="0 0 80 80" width="46" height="46"><circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" stroke-width="3.2"/><circle cx="40" cy="40" r="5.5" fill="currentColor"/></svg>' }),
+            h('h1', { html: 'Welcome to uly<span>OS</span>' }),
+            h('p', { class: 'wl-tag', text: 'Your private workspace — in the browser.' }),
+            h('span', { class: 'wl-ver mono', text: 'v' + ulyOS.version + ' · ' + (off() ? 'offline build' : 'online build') }))),
+        h('div', { class: 'wl-side' },
+          h('p', { class: 'wl-hello', html: 'Hello, <b></b>. Everything you keep here is locked behind your password and stays on this device.' }),
+          feat('shield', '#34d399', '#0ea5e9', 'Private by design', 'Encrypted at rest. No account, no server holding your data.'),
+          feat('globe', '#6366f1', '#a855f7', 'Nothing to install', 'Any browser, any device — and it works offline.'),
+          feat('layers', '#f59e0b', '#ef4444', 'One workspace', 'Files, generators, Speak, Gemini Live and Beam, together.'),
+          h('div', { class: 'wl-stats' }, [['AES-256', 'encrypted'], ['0', 'accounts'], ['100%', 'on-device']].map(([a, b]) => h('div', {}, h('b', { text: a }), h('span', { text: b })))),
+          h('div', { class: 'wl-actions' },
+            h('button', { class: 'btn wl-go welcome-go', html: 'Enter ulyOS ' + icon('arrowRight', 16), onclick: enter }),
+            h('button', { class: 'btn wl-tour', html: icon('compass', 15) + ' Take the tour', onclick: () => { ulyOS.vault.set(SEEN, '1'); T.start(); } }),
+            h('button', { class: 'btn wl-ghost', text: 'Make it yours', onclick: () => { enter(); API().openSettings('appearance'); } })),
+          h('label', { class: 'welcome-opt' }, always, 'Show this welcome screen on every sign-in'),
+          h('div', { class: 'welcome-hint', text: 'Press Enter to start · Esc to close · Help → Guided tour to replay' }))));
+    el.querySelector('.wl-hello b').textContent = name;
     el._key = (e) => { if (e.key === 'Escape' || (e.key === 'Enter' && !e.target.closest?.('button,label,input'))) { e.preventDefault(); enter(); } };
     document.addEventListener('keydown', el._key, true);
     overlay().append(el); welcomeEl = el;

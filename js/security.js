@@ -363,7 +363,7 @@
   /* ------------------------------------------------------------------------
      Profile operations
      ------------------------------------------------------------------------ */
-  async function createProfile({ name, color, secret, data }) {
+  async function createProfile({ name, color, avatar: av, secret, data }) {
     if (!secret) throw new Error('A password is required');
     const bad = policy(secret, 'password');
     if (bad) throw new Error(bad);
@@ -373,7 +373,7 @@
     while (list.some((p) => p.name.toLowerCase() === n.toLowerCase())) n = base + ' ' + i++;
     const profile = {
       id: 'p_' + [...rand(5)].map((b) => b.toString(16).padStart(2, '0')).join(''),
-      name: n, color: color || COLORS[list.length % COLORS.length], protected: true, cred: 'password', created: Date.now(),
+      name: n, color: color || COLORS[list.length % COLORS.length], ...(cleanAvatar(av) ? { avatar: cleanAvatar(av) } : {}), protected: true, cred: 'password', created: Date.now(),
     };
     const vdata = data || {};
     if (isFirst && !data) {   // adopt data from a pre-profile install, then remove the plaintext copies
@@ -503,7 +503,7 @@
     const salt = rand(16);
     const key = await deriveKey(pass, salt, ITER);
     const { iv, ct } = await seal(key, enc.encode(JSON.stringify(Object.fromEntries(S.data))), enc.encode('ulyOS-profile-backup-v1'));
-    const obj = { format: 'ulyOS-profile', v: 1, exported: new Date().toISOString(), profile: { name: S.profile.name, color: S.profile.color }, iter: ITER, salt: b64.enc(salt), iv: b64.enc(iv), ct: b64.enc(ct) };
+    const obj = { format: 'ulyOS-profile', v: 1, exported: new Date().toISOString(), profile: { name: S.profile.name, color: S.profile.color, ...(cleanAvatar(S.profile.avatar) ? { avatar: S.profile.avatar } : {}) }, iter: ITER, salt: b64.enc(salt), iv: b64.enc(iv), ct: b64.enc(ct) };
     return new Blob([JSON.stringify(obj)], { type: 'application/json' });
   }
   async function decryptBackup(text, pass) {
@@ -512,7 +512,7 @@
     if (obj.format !== 'ulyOS-profile') throw new Error('Not a ulyOS profile backup');
     if (!(obj.iter >= 100000 && obj.iter <= 5000000) || typeof obj.salt !== 'string' || typeof obj.iv !== 'string' || typeof obj.ct !== 'string') throw new Error('Corrupted or unsupported backup file');
     const key = await deriveKey(pass, b64.dec(obj.salt), obj.iter);
-    try { return { name: obj.profile?.name || 'Imported', color: obj.profile?.color, data: JSON.parse(dec.decode(await unseal(key, b64.dec(obj.iv), b64.dec(obj.ct), enc.encode('ulyOS-profile-backup-v1')))) }; }
+    try { return { name: obj.profile?.name || 'Imported', color: obj.profile?.color, avatar: cleanAvatar(obj.profile?.avatar), data: JSON.parse(dec.decode(await unseal(key, b64.dec(obj.iv), b64.dec(obj.ct), enc.encode('ulyOS-profile-backup-v1')))) }; }
     catch { throw new Error('Wrong password or corrupted backup'); }
   }
 
@@ -606,7 +606,54 @@
   const authEl = () => document.getElementById('auth');
   let busy = false;
 
-  const avatar = (p, size = 64) => h('div', { class: 'avatar', style: { width: size + 'px', height: size + 'px', fontSize: Math.round(size * 0.42) + 'px', '--c': p.color } }, (p.name || '?').trim().charAt(0).toUpperCase());
+  /* ---- profile pictures: a letter, an emoji or a photo ----
+     The picture is shown on the profile screen before sign-in, so it is stored with the (non-secret) profile name,
+     not inside the encrypted vault. Photos are shrunk to 192×192 first. */
+  const EMOJIS = ['🦊', '🐼', '🦁', '🐯', '🐨', '🐸', '🐙', '🦉', '🦄', '🐲', '🐧', '🦋', '🐝', '🐬', '🦅', '🐺', '🚀', '🛸', '🌙', '⭐', '🌈', '🔥', '⚡', '🌊', '🍀', '🌸', '🍄', '🎧', '🎮', '🎨', '📚', '💡', '🔮', '🧠', '🛡️', '🗝️', '🧭', '☕', '🍕', '🎸', '⚽', '🏔️', '🌴', '🤖', '👾', '👻', '😎', '🥷'];
+  const cleanAvatar = (a) => {
+    if (!a || typeof a !== 'object') return null;
+    if (a.t === 'emoji' && typeof a.v === 'string' && a.v.length > 0 && a.v.length <= 12 && !/[<>&"']/.test(a.v)) return { t: 'emoji', v: a.v };
+    if (a.t === 'photo' && typeof a.v === 'string' && a.v.length <= 60000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(a.v)) return { t: 'photo', v: a.v };
+    return null;
+  };
+  const avatar = (p, size = 64) => {
+    const av = cleanAvatar(p.avatar);
+    const el = h('div', { class: 'avatar' + (av ? ' av-' + av.t : ''), style: { width: size + 'px', height: size + 'px', fontSize: Math.round(size * (av && av.t === 'emoji' ? 0.52 : 0.42)) + 'px', '--c': p.color } });
+    if (av && av.t === 'photo') { const img = h('img', { alt: '', draggable: false }); img.src = av.v; el.append(img); }
+    else el.textContent = av ? av.v : (p.name || '?').trim().charAt(0).toUpperCase();
+    return el;
+  };
+  async function photoFromFile(file) {
+    if (!file || !/^image\//.test(file.type)) throw new Error('Choose an image file');
+    if (file.size > 15 * 1024 * 1024) throw new Error('That image is too large (15 MB max)');
+    const bmp = await createImageBitmap(file);
+    const side = Math.min(bmp.width, bmp.height), cv = document.createElement('canvas');
+    cv.width = cv.height = 192;
+    cv.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, 192, 192);
+    bmp.close?.();
+    let q = 0.84, url = cv.toDataURL('image/jpeg', q);
+    while (url.length > 45000 && q > 0.4) { q -= 0.1; url = cv.toDataURL('image/jpeg', q); }
+    return url;
+  }
+  /** Picture + color chooser used when creating a profile and in Settings. get() → { color, avatar }. */
+  function avatarPicker({ name = '', color = COLORS[0], avatar: init = null } = {}) {
+    let nm = name, col = color, av = cleanAvatar(init), tab = av ? av.t : 'letter';
+    const prev = h('div', { class: 'prev' }), body = h('div', { class: 'av-body' }), tabs = h('div', { class: 'seg av-tabs' }), err = h('div', { class: 'av-err', role: 'alert' });
+    const paintPrev = () => prev.replaceChildren(avatar({ name: nm || '?', color: col, avatar: av }, 80));
+    const swatches = () => h('div', { class: 'swatches' }, COLORS.map((c) => h('button', { type: 'button', class: 'swatch' + (c === col ? ' active' : ''), style: { background: c }, 'aria-label': 'Color ' + c, onclick: () => { col = c; paintAll(); } })));
+    const fileIn = h('input', { type: 'file', accept: 'image/*', hidden: true }), selfie = h('input', { type: 'file', accept: 'image/*', capture: 'user', hidden: true });
+    const take = async (inp) => { err.textContent = ''; try { const f = inp.files[0]; inp.value = ''; if (!f) return; av = { t: 'photo', v: await photoFromFile(f) }; paintAll(); } catch (e) { err.textContent = e.message; } };
+    fileIn.addEventListener('change', () => take(fileIn)); selfie.addEventListener('change', () => take(selfie));
+    const paintAll = () => {
+      paintPrev();
+      tabs.replaceChildren(...[['letter', 'Letter'], ['emoji', 'Emoji'], ['photo', 'Photo']].map(([k, l]) => h('button', { type: 'button', class: tab === k ? 'active' : '', text: l, onclick: () => { tab = k; if (k === 'letter') av = null; else if (k === 'emoji' && (!av || av.t !== 'emoji')) av = { t: 'emoji', v: EMOJIS[0] }; else if (k === 'photo' && av && av.t !== 'photo') av = null; paintAll(); } })));
+      if (tab === 'letter') body.replaceChildren(h('p', { class: 'auth-note', text: 'The first letter of your name on a colored background.' }), swatches());
+      else if (tab === 'emoji') body.replaceChildren(h('div', { class: 'av-emoji' }, EMOJIS.map((e) => h('button', { type: 'button', class: av && av.v === e ? 'on' : '', text: e, 'aria-label': e, onclick: () => { av = { t: 'emoji', v: e }; paintAll(); } }))), swatches());
+      else body.replaceChildren(h('div', { class: 'btn-row' }, h('button', { type: 'button', class: 'btn sm', text: 'Choose a photo…', onclick: () => fileIn.click() }), h('button', { type: 'button', class: 'btn sm', text: 'Take a selfie', onclick: () => selfie.click() }), av && av.t === 'photo' ? h('button', { type: 'button', class: 'btn sm', text: 'Remove', onclick: () => { av = null; paintAll(); } }) : null), h('p', { class: 'auth-note', text: 'The photo is cropped to a square, shrunk to 192 px and kept on this device. It is visible on the sign-in screen, so pick one you are happy for others to see.' }), swatches());
+    };
+    paintAll();
+    return { el: h('div', { class: 'av-picker' }, prev, tabs, body, err, fileIn, selfie), setName(n) { nm = n; paintPrev(); }, get: () => ({ color: col, avatar: av }) };
+  }
 
   function showAuth(view) {
     const el = authEl();
@@ -793,14 +840,11 @@
     const pwc = passwordInput({ mode: 'password' });
     const err = h('div', { class: 'auth-err', role: 'alert' });
     const secretBox = h('div', { class: 'secret-box' });
-    const swatches = h('div', { class: 'swatches' });
-    const prev = h('div', { class: 'prev' });
+    const picker = avatarPicker({ color });
     const notify = !!(ulyOS.admin && ulyOS.admin.notifyEnabled());
     const contact = h('input', { class: 'input', type: 'email', placeholder: 'Your email (optional — lets the admin reach you)', autocomplete: 'email', 'aria-label': 'Optional contact email' });
 
-    const paintPrev = () => prev.replaceChildren(avatar({ name: name.value || '?', color }, 72));
-    const paintSw = () => swatches.replaceChildren(...COLORS.map((c) => h('button', { type: 'button', class: 'swatch' + (c === color ? ' active' : ''), style: { background: c }, 'aria-label': c, onclick: () => { color = c; paintSw(); paintPrev(); } })));
-    name.addEventListener('input', paintPrev);
+    name.addEventListener('input', () => picker.setName(name.value));
     secretBox.append(pwc.el,
       h('p', { class: 'auth-note', text: 'There is no recovery. If you forget this password the profile’s encrypted data cannot be restored — keep an encrypted backup (Settings → Security).' }));
 
@@ -817,7 +861,7 @@
       busy = true; btn.disabled = true; btn.textContent = 'Encrypting…';
       await new Promise((r) => setTimeout(r, 30));
       try {
-        const { profile, opened } = await createProfile({ name: name.value, color, secret: sec });
+        const { profile, opened } = await createProfile({ name: name.value, ...picker.get(), secret: sec });
         busy = false;
         if (ulyOS.admin) ulyOS.admin.notifyNewProfile(profile, { contact: contact.value.trim().slice(0, 120) });
         await startSession(profile, opened);
@@ -827,14 +871,13 @@
     const form = h('form', { class: 'auth-form wide', onsubmit: submit },
       h('h2', { class: 'auth-name', text: first ? 'Create your profile' : 'New profile' }),
       first ? h('p', { class: 'auth-sub', text: 'Your desktop, files and app data live in a profile. It is protected by a password that encrypts everything at rest.' }) : null,
-      prev, name, swatches,
+      picker.el, name,
       secretBox,
       notify ? h('div', { class: 'notice' }, h('div', { class: 'notice-text', html: 'ℹ ' }, ulyOS.admin.disclosure), contact) : null,
       err, btn,
       h('div', { class: 'auth-links' },
         first ? null : h('button', { type: 'button', class: 'link', onclick: () => showAuth(pickView()), text: '← All profiles' }),
         h('button', { type: 'button', class: 'link', onclick: () => showAuth(importView(first)), text: 'Import encrypted backup…' })));
-    paintSw(); paintPrev();
     form._dispose = () => pwc.dispose();
     return form;
   }
@@ -853,7 +896,7 @@
       await new Promise((r) => setTimeout(r, 30));
       try {
         const b = await decryptBackup(await file.files[0].text(), pass.value);
-        const { profile, opened } = await createProfile({ name: b.name, color: b.color, secret: np.value || pass.value, data: b.data });
+        const { profile, opened } = await createProfile({ name: b.name, color: b.color, secret: np.value || pass.value, data: b.data, avatar: b.avatar });
         busy = false;
         if (ulyOS.admin) ulyOS.admin.notifyNewProfile(profile, { source: 'import' });
         await startSession(profile, opened);
@@ -898,6 +941,9 @@
     setAutoLock: (m) => { vault.set('ulyos.autolock', String(m)); ulyOS.audit('Auto-lock set to ' + (m ? m + ' min idle' : 'never'), 'info'); },
     rename(n) { n = n.trim(); if (!n) return; ulyOS.audit("Profile renamed '" + S.profile.name + "' → '" + n + "'", 'info'); S.profile.name = n; patchProfile(S.profile); bus.emit('profile:change'); },
     setColor(c) { S.profile.color = c; patchProfile(S.profile); bus.emit('profile:change'); },
+    setPicture({ color, avatar: av }) { if (COLORS.includes(color)) S.profile.color = color; const c = cleanAvatar(av); if (c) S.profile.avatar = c; else delete S.profile.avatar; patchProfile(S.profile); if (!c) saveProfiles(loadProfiles().map((x) => { if (x.id === S.profile.id) { const y = { ...x }; delete y.avatar; return y; } return x; })); bus.emit('profile:change'); },
+    avatarEl: (p, size) => avatar(p, size),
+    avatarPicker,
     async deleteSelf(secret) {
       if (!(await verifySecret(secret))) throw new Error('Password is incorrect');
       const id = S.profile.id; const name = S.profile.name;

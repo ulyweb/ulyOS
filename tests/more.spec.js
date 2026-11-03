@@ -64,8 +64,8 @@ test('welcome screen and guided tour', async ({ page }) => {
   await page.waitForSelector('.welcome', { timeout: 8000 });
   await expect(page.locator('.welcome')).toContainText('Welcome to ulyOS');
   await expect(page.locator('.welcome')).toContainText('Private by design');
-  await expect(page.locator('.welcome')).toContainText('version ' + await page.evaluate(() => ulyOS.version));
-  await page.click('.welcome button:has-text("Guided tour")');
+  await expect(page.locator('.welcome')).toContainText('v' + await page.evaluate(() => ulyOS.version));
+  await page.click('.welcome button:has-text("Take the tour")');
   await page.waitForSelector('.tour-card');
   const n = await page.locator('.tour-dots i').count();
   expect(n).toBeGreaterThanOrEqual(10);

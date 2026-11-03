@@ -128,7 +128,7 @@
     const paintChip = () => {
       const p = ulyOS.security.profile();
       if (!p) return;
-      chip.replaceChildren(...[h('span', { class: 'chip-av', style: { '--c': p.color }, text: p.name.trim().charAt(0).toUpperCase() }), h('span', { class: 'chip-name', text: p.name }), p.protected ? h('span', { class: 'chip-lock', html: icon('lock', 12) }) : null].filter(Boolean));
+      chip.replaceChildren(...[ulyOS.security.avatarEl(p, 22), h('span', { class: 'chip-name', text: p.name }), p.protected ? h('span', { class: 'chip-lock', html: icon('lock', 12) }) : null].filter(Boolean));
       chip.title = 'Profile: ' + p.name;
     };
     paintChip();

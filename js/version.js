@@ -3,8 +3,16 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.15.0';
+ulyOS.version = '1.16.0';
 ulyOS.CHANGELOG = [
+  { v: '1.16.0', d: '2026-11-03', n: [
+    'Full-colour app icons: hand-drawn, layered, multi-colour icons (squircle tiles with gloss and depth, like a modern desktop system) for Gemini Live, Speak, Beam, App Store, the Apps folder and every stock app — on the desktop, in the folder, taskbar and Start menu. Switch off in Settings → Desktop',
+    'A redesigned welcome screen: gradient hero with floating app icons, three benefit cards, key facts and clear actions',
+    'Profile pictures: choose a letter, an emoji or your own photo (cropped and shrunk on-device, or take a selfie) when creating a profile or later in Settings → Security; also shown beside the clock and kept in encrypted backups',
+    'Wallpapers: 8 space scenes (Mars, Jupiter, Saturn, nebula, galaxy, Earth horizon, black hole, lunar earthrise) and 7 anime-style scenes (sakura twilight, neon city rain, sea of mirrors, summer clouds, lantern night, golden-hour rooftop, bamboo moon) drawn as vector art — sharp at 1080p or 4K, offline, no licence strings — plus 8 real Cassini / Hubble photos (public domain / CC0) loaded from Wikimedia Commons only when you ask',
+    'Widgets can be pinned in place (they keep their exact spot and others make way) and themed: pick a palette for all widgets in Settings → Widgets or per widget (right-click → Theme, including custom colors)',
+    'New widgets: Weather (Open-Meteo, any city, °C / °F), To-do (private, encrypted), World clocks, Moon phase and Device (battery, network, CPU, memory)',
+  ] },
   { v: '1.15.0', d: '2026-11-03', n: [
     'New default layout: a full-width Taskbar that stays visible (no floating dock, no auto-hide) with Settings, Beam, Files and Task Manager pinned',
     'A calm desktop: only Gemini Live, Speak, Beam and App Store, plus a new Apps folder that holds every other icon (open it, search it, drag icons onto it, right-click → Move to desktop). Apps added from the App Store land in the folder. Existing profiles are migrated once; your own shortcuts are kept inside Apps',

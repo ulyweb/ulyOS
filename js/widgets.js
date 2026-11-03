@@ -129,9 +129,14 @@
     const sources = list(r.sources, (v) => typeof v === 'string' && (/^(world|trending|tech)$/.test(v) || /^espn:[a-z0-9-]+\/[a-z0-9._-]+$/i.test(v)) ? v : null, 6); if (sources) o.sources = sources;
     if (typeof r.team === 'string') o.team = str(r.team, 40);
     if (r.tab === 'watch' || r.tab === 'trend') o.tab = r.tab;
+    const zones = list(r.zones, (z) => (typeof z === 'string' && validZone(z) ? z : null), 6); if (zones && zones.length) o.zones = zones;
+    if (r.city && typeof r.city.name === 'string' && Number.isFinite(+r.city.lat) && Number.isFinite(+r.city.lon) && Math.abs(r.city.lat) <= 90 && Math.abs(r.city.lon) <= 180) o.city = { name: str(r.city.name, 60), lat: +r.city.lat, lon: +r.city.lon };
+    if (r.unit === 'c' || r.unit === 'f') o.unit = r.unit;
     return o;
   }
 
+  const DEFAULT_ZONES = ['America/New_York', 'Europe/London', 'Asia/Tokyo'];
+  const validZone = (z) => { try { new Intl.DateTimeFormat([], { timeZone: z }); return /^[A-Za-z_]+(\/[A-Za-z0-9_+-]+)+$|^UTC$/.test(z); } catch { return false; } };
   const TYPES = {
     clock: {
       name: 'Clock', ico: 'clock', size: 's',
@@ -463,10 +468,151 @@
         return { update: paint };
       },
     },
+
+    todo: {
+      name: 'To-do', ico: 'check', size: 'm', private: true,
+      build(body, inst, ctx) {
+        inst.items = Array.isArray(inst.items) ? inst.items : [];
+        const list = h('div', { class: 'td-list w-nodrag' });
+        const input = h('input', { class: 'input sm w-nodrag', placeholder: 'Add a task and press Enter', maxLength: 120, 'aria-label': 'New task' });
+        const persist = () => ctx.save({ items: inst.items });
+        const paint = () => {
+          const left = inst.items.filter((i) => !i.d).length;
+          list.replaceChildren(...(inst.items.length ? inst.items.map((it, idx) => h('label', { class: 'td-item' + (it.d ? ' done' : '') },
+            h('input', { type: 'checkbox', checked: !!it.d, onchange: (e) => { it.d = e.target.checked; persist(); paint(); } }),
+            h('span', { text: it.t }),
+            h('button', { class: 'td-x', 'aria-label': 'Delete task', title: 'Delete', html: icon('x', 11), onclick: (e) => { e.preventDefault(); inst.items.splice(idx, 1); persist(); paint(); } }))) : [h('div', { class: 'w-sub', text: 'Nothing to do — enjoy the quiet.' })]));
+          foot.textContent = inst.items.length ? left + ' left · ' + (inst.items.length - left) + ' done' : '';
+        };
+        const foot = h('div', { class: 'w-sub' });
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && input.value.trim() && inst.items.length < 30) { inst.items.unshift({ t: input.value.trim().slice(0, 120), d: false }); input.value = ''; persist(); paint(); } });
+        body.append(input, list, h('div', { class: 'td-foot' }, foot, h('button', { class: 'btn sm w-nodrag', text: 'Clear done', onclick: () => { inst.items = inst.items.filter((i) => !i.d); persist(); paint(); } })));
+        paint();
+        return {};
+      },
+    },
+    world: {
+      name: 'World clocks', ico: 'clock', size: 'l', cfg: true,
+      async config(inst) {
+        const v = await ui.form({ title: 'World clocks', message: 'Up to 6 time zones, separated by commas — e.g. America/New_York, Europe/London, Asia/Tokyo, Australia/Sydney.', fields: [{ name: 'z', label: 'Time zones', value: (inst.zones || DEFAULT_ZONES).join(', ') }], okText: 'Save', validate: (x) => { const l = x.z.split(',').map((t) => t.trim()).filter(Boolean); return l.length && l.length <= 6 && l.every(validZone) ? null : 'Use valid names like Europe/Paris (max 6)'; } });
+        return v ? { zones: v.z.split(',').map((t) => t.trim()).filter(Boolean) } : null;
+      },
+      build(body, inst) {
+        const zones = inst.zones && inst.zones.length ? inst.zones : DEFAULT_ZONES;
+        const rows = zones.map((z) => { const t = h('b', { class: 'mono' }), d = h('span', { class: 'w-sub' }); return { z, t, d, el: h('div', { class: 'wc-row' }, h('div', {}, h('div', { text: z.split('/').pop().replace(/_/g, ' ') }), d), t) }; });
+        body.append(h('div', { class: 'wc-list' }, rows.map((r) => r.el)));
+        const update = () => {
+          const now = new Date(), h12 = SETTINGS().get('clockFormat') !== '24';
+          rows.forEach((r) => {
+            try {
+              r.t.textContent = new Intl.DateTimeFormat([], { timeZone: r.z, hour: '2-digit', minute: '2-digit', hour12: h12 }).format(now);
+              const day = new Intl.DateTimeFormat('en-CA', { timeZone: r.z }).format(now), mine = new Intl.DateTimeFormat('en-CA').format(now);
+              r.d.textContent = day === mine ? 'Today' : day > mine ? 'Tomorrow' : 'Yesterday';
+            } catch { r.t.textContent = '—'; }
+          });
+        };
+        update();
+        return { update };
+      },
+    },
+    moon: {
+      name: 'Moon', ico: 'sparkles', size: 's',
+      build(body) {
+        const face = h('div', { class: 'mn-face' }), name = h('div', { class: 'w-time mn-name' }), sub = h('div', { class: 'w-sub' }), nxt = h('div', { class: 'w-sub' });
+        body.classList.add('w-center'); body.append(face, name, sub, nxt);
+        const update = () => {
+          const SYN = 29.530588853, ref = Date.UTC(2000, 0, 6, 18, 14) / 864e5;
+          const age = (((Date.now() / 864e5 - ref) % SYN) + SYN) % SYN, ill = (1 - Math.cos((2 * Math.PI * age) / SYN)) / 2;
+          const idx = Math.floor((age / SYN) * 8 + 0.5) % 8;
+          face.textContent = ['🌑', '🌒', '🌓', '🌔', '🌕', '🌖', '🌗', '🌘'][idx];
+          name.textContent = ['New moon', 'Waxing crescent', 'First quarter', 'Waxing gibbous', 'Full moon', 'Waning gibbous', 'Last quarter', 'Waning crescent'][idx];
+          sub.textContent = Math.round(ill * 100) + '% lit · day ' + Math.floor(age + 1);
+          const toFull = (SYN / 2 - age + SYN) % SYN, toNew = (SYN - age) % SYN;
+          nxt.textContent = 'Full in ' + Math.round(toFull) + ' d · New in ' + Math.round(toNew) + ' d';
+        };
+        update();
+        return { update };
+      },
+    },
+    device: {
+      name: 'Device', ico: 'cpu', size: 'm',
+      build(body) {
+        const rows = {};
+        const row = (k, label) => { const v = h('b', { class: 'mono' }); rows[k] = v; return h('div', { class: 'dv-row' }, h('span', { class: 'sys-l', text: label }), v); };
+        const bar = h('div', { class: 'stor-bar' }, h('i'));
+        body.append(row('bat', 'Battery'), bar, row('net', 'Network'), row('cpu', 'CPU cores'), row('mem', 'Memory'), row('scr', 'Screen'));
+        let battery = null;
+        const update = () => {
+          if (battery) { rows.bat.textContent = Math.round(battery.level * 100) + '%' + (battery.charging ? ' ⚡ charging' : ''); bar.firstChild.style.width = battery.level * 100 + '%'; }
+          else { rows.bat.textContent = navigator.getBattery ? '…' : 'not available'; bar.hidden = !battery; }
+          const c = navigator.connection;
+          rows.net.textContent = (navigator.onLine ? 'online' : 'offline') + (c && c.effectiveType ? ' · ' + c.effectiveType + (c.downlink ? ' · ' + c.downlink + ' Mbps' : '') : '');
+          rows.cpu.textContent = navigator.hardwareConcurrency ? String(navigator.hardwareConcurrency) : 'n/a';
+          rows.mem.textContent = navigator.deviceMemory ? '≥ ' + navigator.deviceMemory + ' GB' : 'n/a';
+          rows.scr.textContent = screen.width + '×' + screen.height + ' @' + (devicePixelRatio || 1) + 'x';
+        };
+        navigator.getBattery?.().then((b) => { battery = b; bar.hidden = false; update(); ['levelchange', 'chargingchange'].forEach((e) => b.addEventListener(e, update)); }).catch(() => {});
+        update();
+        return { update };
+      },
+    },
+    weather: {
+      name: 'Weather', ico: 'globe', size: 'm', cfg: true,
+      async config(inst) {
+        const v = await ui.form({ title: 'Weather', message: 'Search for a city (data from Open-Meteo, no account or key needed).', fields: [{ name: 'city', label: 'City', value: inst.city ? inst.city.name : '' }, { name: 'unit', label: 'Units', type: 'select', value: inst.unit || 'c', options: [{ value: 'c', label: '°C · km/h' }, { value: 'f', label: '°F · mph' }] }], okText: 'Find', validate: (x) => (x.city.trim().length >= 2 ? null : 'Enter a city name') });
+        if (!v) return null;
+        try {
+          const r = await fetch('https://geocoding-api.open-meteo.com/v1/search?count=1&language=en&format=json&name=' + encodeURIComponent(v.city.trim()));
+          const j = await r.json(); const c = j.results && j.results[0];
+          if (!c) { ui.toast('No city found for “' + v.city.trim() + '”', { type: 'err' }); return null; }
+          return { city: { name: String(c.name).slice(0, 60) + (c.country_code ? ', ' + c.country_code : ''), lat: +c.latitude, lon: +c.longitude }, unit: v.unit };
+        } catch { ui.toast('Could not reach the weather service', { type: 'err' }); return null; }
+      },
+      build(body, inst, ctx) {
+        const head = h('div', { class: 'wx-now' }), days = h('div', { class: 'wx-days' }), foot = h('div', { class: 'w-sub' });
+        const setup = h('button', { class: 'btn sm primary w-nodrag', text: 'Choose a city…', onclick: () => W.configure(inst.id) });
+        body.append(head, days, foot);
+        const CODES = { 0: ['☀️', 'Clear'], 1: ['🌤️', 'Mostly clear'], 2: ['⛅', 'Partly cloudy'], 3: ['☁️', 'Overcast'], 45: ['🌫️', 'Fog'], 48: ['🌫️', 'Rime fog'], 51: ['🌦️', 'Light drizzle'], 53: ['🌦️', 'Drizzle'], 55: ['🌧️', 'Heavy drizzle'], 61: ['🌧️', 'Light rain'], 63: ['🌧️', 'Rain'], 65: ['🌧️', 'Heavy rain'], 71: ['🌨️', 'Light snow'], 73: ['🌨️', 'Snow'], 75: ['❄️', 'Heavy snow'], 80: ['🌦️', 'Showers'], 81: ['🌧️', 'Showers'], 82: ['⛈️', 'Violent showers'], 95: ['⛈️', 'Thunderstorm'], 96: ['⛈️', 'Thunderstorm, hail'], 99: ['⛈️', 'Thunderstorm, hail'] };
+        const code = (c) => CODES[c] || CODES[Math.floor(c / 10) * 10] || ['🌡️', 'Weather'];
+        let timer = 0, dead = false;
+        async function load() {
+          if (!inst.city) { head.replaceChildren(h('div', { class: 'w-sub', text: 'Show the weather for your city.' }), setup); days.replaceChildren(); foot.textContent = ''; return; }
+          const f = inst.unit === 'f';
+          try {
+            const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + inst.city.lat + '&longitude=' + inst.city.lon + '&current=temperature_2m,weather_code,wind_speed_10m,apparent_temperature&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=5&timezone=auto' + (f ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '');
+            const j = await (await fetch(url)).json(); if (dead) return;
+            const [em, tx] = code(j.current.weather_code), u = f ? '°F' : '°C';
+            head.replaceChildren(h('div', { class: 'wx-big' }, h('span', { class: 'wx-em', text: em }), h('b', { text: Math.round(j.current.temperature_2m) + u })), h('div', {}, h('div', { text: tx }), h('div', { class: 'w-sub', text: inst.city.name + ' · feels ' + Math.round(j.current.apparent_temperature) + u + ' · wind ' + Math.round(j.current.wind_speed_10m) + (f ? ' mph' : ' km/h') })));
+            days.replaceChildren(...j.daily.time.map((d, i) => h('div', { class: 'wx-day' }, h('span', { text: new Date(d + 'T12:00').toLocaleDateString([], { weekday: 'short' }) }), h('span', { class: 'wx-em', text: code(j.daily.weather_code[i])[0] }), h('b', { text: Math.round(j.daily.temperature_2m_max[i]) + '°' }), h('span', { class: 'w-sub', text: Math.round(j.daily.temperature_2m_min[i]) + '°' }))));
+            foot.textContent = 'Open-Meteo · ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+          } catch { if (!dead) foot.textContent = 'Could not load the forecast (offline?)'; }
+        }
+        load(); timer = setInterval(load, 15 * 60000);
+        return { refresh: load, destroy() { dead = true; clearInterval(timer); } };
+      },
+    },
   };
   W.types = TYPES;
 
   /* ---------------- instances ---------------- */
+  /* Widget themes: [name, colour 1, colour 2]. "auto" keeps each widget type's own palette. */
+  const THEMES = [['auto', 'Per widget (default)'], ['ocean', 'Ocean', '#0ea5e9', '#6366f1'], ['sunset', 'Sunset', '#fb7185', '#f59e0b'], ['forest', 'Forest', '#22c55e', '#14b8a6'], ['violet', 'Violet', '#8b5cf6', '#ec4899'], ['aurora', 'Aurora', '#34d399', '#8b5cf6'], ['ember', 'Ember', '#f97316', '#dc2626'], ['sakura', 'Sakura', '#f9a8d4', '#c084fc'], ['mono', 'Graphite', '#94a3b8', '#475569']];
+  W.themes = THEMES;
+  const HEXC = /^#[0-9a-f]{6}$/i;
+  const themeCols = (t) => {
+    if (typeof t === 'string' && t.startsWith('c:')) { const [a, b] = t.slice(2).split(','); return HEXC.test(a) && HEXC.test(b) ? [a, b] : null; }
+    const e = THEMES.find((x) => x[0] === t && x.length > 2); return e ? [e[2], e[3]] : null;
+  };
+  const themeSan = (t) => (typeof t === 'string' && (THEMES.some((x) => x[0] === t) || (t.startsWith('c:') && themeCols(t))) ? t : undefined);
+  const effTheme = (i) => i.theme || SETTINGS().get('widgetTheme') || 'auto';
+  function paintTheme(i, el) {
+    const c = themeCols(effTheme(i));
+    if (c) { el.style.setProperty('--w1', c[0]); el.style.setProperty('--w2', c[1]); } else { el.style.removeProperty('--w1'); el.style.removeProperty('--w2'); }
+    el.classList.toggle('pinned', !!i.pin);
+    const b = el.querySelector('.w-pin'); if (b) { b.classList.toggle('on', !!i.pin); b.title = i.pin ? 'Pinned in place — click to unpin' : 'Pin in place'; b.setAttribute('aria-pressed', i.pin ? 'true' : 'false'); }
+  }
+  const miscSan = (r) => ({ ...(r.pin ? { pin: true } : {}), ...(themeSan(r.theme) ? { theme: themeSan(r.theme) } : {}) });
+  const miscOf = (i) => ({ ...(i.pin ? { pin: true } : {}), ...(i.theme ? { theme: i.theme } : {}) });
   const MINW = 168, MINH = 120, MAXW = 900, MAXH = 900;
   /** width/height of an instance: free-form if the user resized it, else the preset */
   const dim = (i) => [i.w || SIZES[i.size][0], i.h || SIZES[i.size][1]];
@@ -491,8 +637,9 @@
   const bucket = (w, hh) => (hh >= 440 ? 'x' : hh >= 300 ? 'l' : w >= 300 ? 'm' : 's');
   const uid = () => 'wg_' + Math.random().toString(36).slice(2, 9);
   const area = () => ({ w: layer ? layer.clientWidth : window.innerWidth, h: layer ? layer.clientHeight : window.innerHeight });
-  const cfgOf = (i) => { const o = {}; ['tokens', 'watch', 'leagues', 'sources', 'team', 'tab'].forEach((k) => { if (i[k] !== undefined) o[k] = i[k]; }); return o; };
-  const save = debounce(() => store.set('ulyos.widgets', { v: 1, list: insts.map((i) => ({ id: i.id, type: i.type, size: i.size, x: i.x, y: i.y, ...anchorOf(i), ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i), ...(i.type === 'notes' ? { text: i.text } : {}) })) }), 200);
+  const cfgOf = (i) => { const o = {}; ['tokens', 'watch', 'leagues', 'sources', 'team', 'tab', 'zones', 'city', 'unit'].forEach((k) => { if (i[k] !== undefined) o[k] = i[k]; }); return o; };
+  const persist = () => store.set('ulyos.widgets', { v: 1, list: insts.map((i) => ({ id: i.id, type: i.type, size: i.size, x: i.x, y: i.y, ...anchorOf(i), ...miscOf(i), ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i), ...(i.type === 'notes' ? { text: i.text } : {}), ...(i.type === 'todo' ? { items: i.items || [] } : {}) })) });
+  const save = debounce(persist, 200);
 
   const iconBlocks = () => {
     const cw = parseFloat(css('--cell-w')) || 100, ch = parseFloat(css('--cell-h')) || 110, pad = (ulyOS.Desktop && ulyOS.Desktop.pad) || 16;
@@ -528,11 +675,12 @@
     const head = h('div', { class: 'w-head' }, h('span', { class: 'w-ico', html: icon(T.ico, 13) }), h('span', { class: 'w-title', text: T.name }),
       T.speak && ulyOS.Speech && ulyOS.Speech.supported ? h('button', { class: 'w-speak', 'aria-label': 'Read aloud', title: 'Read aloud', html: icon('volume', 12), onclick: () => ulyOS.Speech.speak(T.speak(inst)) }) : null,
       T.config ? h('button', { class: 'w-x w-cfg', 'aria-label': 'Configure widget', title: 'Configure', html: icon('settings', 12), onclick: () => W.configure(inst.id) }) : null,
+      h('button', { class: 'w-pin', 'aria-label': 'Pin in place', title: 'Pin in place', html: icon('pin', 12), onclick: () => W.setPin(inst.id, !inst.pin) }),
       h('button', { class: 'w-x', 'aria-label': 'Remove widget', title: 'Remove', html: icon('x', 12), onclick: () => W.remove(inst.id) }));
     const grip = h('div', { class: 'w-rz w-nodrag', title: 'Drag to resize', 'aria-label': 'Resize widget' });
     const el = h('section', { class: 'wgt wgt-' + inst.type, dataset: { id: inst.id }, style: { width: w + 'px', height: hh + 'px', left: inst.x + 'px', top: inst.y + 'px' } }, head, body, grip);
     grip.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || document.body.classList.contains('compact')) return;
+      if (e.button !== 0 || document.body.classList.contains('compact') || inst.pin) return;
       e.preventDefault(); e.stopPropagation();
       const sx = e.clientX, sy = e.clientY, [ow, oh] = [el.offsetWidth, el.offsetHeight];
       inst.x = el.offsetLeft; inst.y = el.offsetTop;   // continue from where it is shown
@@ -557,13 +705,14 @@
       grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
     });
     layer.append(el);
+    paintTheme(inst, el);
     const api = T.build(body, inst, ctx) || {};
     api.update?.();
     live.set(inst.id, { el, ...api });
 
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); ui.contextMenu(e.clientX, e.clientY, itemMenu(inst)); });
     el.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 || document.body.classList.contains('compact') || e.target.closest('button,input,textarea,select,a,canvas,.w-nodrag')) return;
+      if (e.button !== 0 || document.body.classList.contains('compact') || inst.pin || e.target.closest('button,input,textarea,select,a,canvas,.w-nodrag')) return;
       const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
       let moved = false;
       try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
@@ -615,6 +764,22 @@
     { const l = live.get(id); const cx = l ? l.el.offsetLeft : inst.x, cy = l ? l.el.offsetTop : inst.y; setAnchor(inst, clamp(cx, 0, Math.max(0, a.w - w)), clamp(cy, 0, Math.max(0, a.h - hh)), w, hh); }
     mount(inst); save(); relayout();
   };
+  W.setPin = function (id, on) {
+    const inst = insts.find((x) => x.id === id), l = live.get(id);
+    if (!inst) return;
+    if (on) { const el = l && l.el; if (el) setAnchor(inst, el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight); inst.pin = true; } else delete inst.pin;
+    if (l) paintTheme(inst, l.el);
+    persist(); relayout(); bus.emit('widgets:change');
+    ulyOS.audit("Widget '" + TYPES[inst.type].name + "' " + (on ? 'pinned in place' : 'unpinned'), 'info');
+  };
+  W.setTheme = function (id, theme) {
+    const inst = insts.find((x) => x.id === id), l = live.get(id);
+    if (!inst) return;
+    const t = themeSan(theme); if (t && t !== 'auto') inst.theme = t; else delete inst.theme;
+    if (l) paintTheme(inst, l.el);
+    persist();
+  };
+  W.restyle = () => insts.forEach((i) => { const l = live.get(i.id); if (l) paintTheme(i, l.el); });
   W.rebuild = function (id) {
     const inst = insts.find((x) => x.id === id);
     if (!inst) return;
@@ -637,6 +802,13 @@
       { label: T.name, icon: T.ico, disabled: true },
       { separator: true },
       T.config ? { label: 'Configure…', icon: 'settings', action: () => W.configure(inst.id) } : null,
+      { label: inst.pin ? 'Unpin' : 'Pin in place', icon: 'pin', action: () => W.setPin(inst.id, !inst.pin) },
+      { label: 'Theme', icon: 'palette', submenu: [
+        ...THEMES.map((t) => ({ label: ((inst.theme || 'auto') === t[0] ? '✓ ' : '    ') + (t[0] === 'auto' ? 'Default (follow settings)' : t[1]), action: () => W.setTheme(inst.id, t[0]) })),
+        { separator: true }, { label: 'Custom colors…', action: async () => {
+          const v = await ui.form({ title: 'Widget colors', message: 'Two hex colors make the gradient, e.g. #38bdf8 and #8b5cf6.', fields: [{ name: 'a', label: 'Color 1', value: '#38bdf8' }, { name: 'b', label: 'Color 2', value: '#8b5cf6' }], okText: 'Apply', validate: (x) => (HEXC.test((x.a || '').trim()) && HEXC.test((x.b || '').trim()) ? null : 'Use six-digit hex colors like #38bdf8') });
+          if (v) W.setTheme(inst.id, 'c:' + v.a.trim() + ',' + v.b.trim());
+        } }] },
       { label: 'Size', icon: 'grid', submenu: Object.keys(SIZES).map((s) => ({ label: (inst.size === s ? '✓ ' : '    ') + SIZE_LABEL[s], action: () => W.setSize(inst.id, s) })) },
       live.get(inst.id)?.refresh ? { label: 'Refresh now', icon: 'refresh', action: () => live.get(inst.id)?.refresh?.() } : null,
       { label: 'Add widget', icon: 'plus', submenu: addItems() },
@@ -664,17 +836,18 @@
     return h('div', {},
       h('h3', { text: 'Widgets' }),
       H.row('Show widgets', 'Hide or show every widget on the desktop', H.sw('widgetsVisible')),
+      H.row('Widget theme', 'Colors for all widgets. Right-click a widget → Theme to override just that one; the pin button keeps a widget exactly where it is', H.choose('widgetTheme', THEMES.map((t) => [t[0], t[1]]))),
       h('div', { class: 'set-tools' }, Object.entries(TYPES).map(([k, T]) => h('button', { class: 'btn sm', html: icon(T.ico, 14) + ' ' + T.name, onclick: () => { W.add(k); paint(); } }))),
       list,
       h('div', { class: 'set-desc', text: 'Drag a widget to move it; right-click for size and removal. Crypto prices call the public CoinGecko API (only while that widget exists).' }));
   };
-  W.exportList = () => insts.map((i) => ({ type: i.type, size: i.size, x: i.x, y: i.y, ...anchorOf(i), ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i) }));
+  W.exportList = () => insts.map((i) => ({ type: i.type, size: i.size, x: i.x, y: i.y, ...anchorOf(i), ...miscOf(i), ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i) }));
   W.importList = function (list) {
     if (!Array.isArray(list)) return;
     W.clear();
     list.slice(0, MAX).forEach((r) => {
       if (!r || !TYPES[r.type] || !SIZES[r.size]) return;
-      const inst = { id: uid(), type: r.type, size: r.size, x: clamp(Math.round(+r.x) || 0, 0, 4000), y: clamp(Math.round(+r.y) || 0, 0, 4000), ...sizeOf(r), ...anchorSan(r), ...cleanCfg(r) };
+      const inst = { id: uid(), type: r.type, size: r.size, x: clamp(Math.round(+r.x) || 0, 0, 4000), y: clamp(Math.round(+r.y) || 0, 0, 4000), ...sizeOf(r), ...anchorSan(r), ...miscSan(r), ...cleanCfg(r) };
       insts.push(inst); mount(inst);
     });
     relayout(); save(); bus.emit('widgets:change');
@@ -687,7 +860,7 @@
   function relayout() {
     if (!layer || document.body.classList.contains('compact')) return;
     const a = area();
-    const order = [...insts].sort((p, q) => p.y - q.y || p.x - q.x).filter((i) => live.get(i.id));
+    const order = [...insts].sort((p, q) => (q.pin ? 1 : 0) - (p.pin ? 1 : 0) || p.y - q.y || p.x - q.x).filter((i) => live.get(i.id));   // pinned widgets are placed first
     /** Place everyone at their anchored spot if it is clear; otherwise at the nearest clear spot, shrunk by factor k when
         needed (0 = minimum size). Returns null if some widget has nowhere to go (unless cascade is allowed). */
     const plan = (k, cascade) => {
@@ -698,7 +871,7 @@
         w = Math.min(w, Math.max(MINW, a.w - 16)); hh = Math.min(hh, Math.max(MINH, a.h - 16));   // never larger than the screen
         const [px, py] = posOf(i, w, hh);
         let x = clamp(px, 0, Math.max(0, a.w - w)), y = clamp(py, 0, Math.max(0, a.h - hh));
-        if (overlaps(blocks, x, y, w, hh)) {
+        if (!i.pin && overlaps(blocks, x, y, w, hh)) {
           const tw = k ? Math.max(MINW, Math.round(w * k)) : MINW, th = k ? Math.max(MINH, Math.round(hh * k)) : MINH;
           const spot = nearestSpot(x, y, tw, th, blocks);
           if (spot) { x = spot.x; y = spot.y; w = tw; hh = th; }
@@ -738,7 +911,7 @@
     if (saved && Array.isArray(saved.list)) {
       saved.list.slice(0, MAX).forEach((r) => {
         if (!r || !TYPES[r.type] || !SIZES[r.size]) return;
-        const inst = { id: typeof r.id === 'string' ? r.id : uid(), type: r.type, size: r.size, x: +r.x || 0, y: +r.y || 0, ...sizeOf(r), ...anchorSan(r), ...cleanCfg(r), ...(typeof r.text === 'string' ? { text: r.text.slice(0, 5000) } : {}) };
+        const inst = { id: typeof r.id === 'string' ? r.id : uid(), type: r.type, size: r.size, x: +r.x || 0, y: +r.y || 0, ...sizeOf(r), ...anchorSan(r), ...miscSan(r), ...cleanCfg(r), ...(typeof r.text === 'string' ? { text: r.text.slice(0, 5000) } : {}), ...(r.type === 'todo' && Array.isArray(r.items) ? { items: r.items.slice(0, 30).filter((x) => x && typeof x.t === 'string').map((x) => ({ t: x.t.slice(0, 120), d: !!x.d })) } : {}) };
         insts.push(inst); mount(inst);
       });
       relayout();
@@ -746,7 +919,7 @@
     W.applyVisibility();
     setInterval(() => { if (!document.hidden) live.forEach((l) => { try { l.update?.(); } catch { /* ignore */ } }); }, 1000);
     window.addEventListener('resize', relayoutSoon);
-    bus.on('settings:change', () => { W.applyVisibility(); relayoutSoon(); live.forEach((l) => l.update?.()); });
+    bus.on('settings:change', () => { W.applyVisibility(); W.restyle(); relayoutSoon(); live.forEach((l) => l.update?.()); });
     bus.on('desktop:layout', relayoutSoon); bus.on('widgets:change', relayoutSoon);
   };
 })();

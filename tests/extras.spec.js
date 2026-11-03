@@ -99,7 +99,7 @@ test('Speak: save text to Files and as a download, open text, record with a loca
   await page.evaluate(() => ulyOS.vault.set('ulyos.speech', JSON.stringify({ voice: 'cloud', rate: 1, pitch: 1, volume: 1, perWord: false })));
   await page.fill('.spk textarea', 'hello there');
   await page.evaluate(() => { window.__used.length = 0; });
-  const [dl2] = await Promise.all([page.waitForEvent('download'), (async () => { await page.click('.spk button:has-text("Record to file")'); await page.click('.modal button:has-text("Continue")'); await page.waitForSelector('.modal input'); await page.selectOption('.modal select', 'download'); await page.click('.modal button:has-text("Save")'); })()]);
+  const [dl2] = await Promise.all([page.waitForEvent('download'), (async () => { await page.click('.spk button:has-text("Save audio")'); await page.click('.modal button:has-text("Continue")'); await page.waitForSelector('.modal input'); await page.selectOption('.modal select', 'download'); await page.click('.modal button:has-text("Save")'); })()]);
   expect(dl2.suggestedFilename()).toMatch(/^speech-.*\.wav$/);
   expect(await page.evaluate(() => window.__used.pop())).toBe('local');
   expect(problems).toEqual([]);
@@ -138,5 +138,45 @@ test('folder connector: two profiles sync through a shared folder (encrypted fil
   await page.waitForSelector('.modal:has-text("Changes received")', { timeout: 40000 });
   await page.click('.modal button:has-text("Later")');
   expect(await page.evaluate(() => ulyOS.vault.get('app:demo:x'))).toBe('from-one');
+  expect(problems).toEqual([]);
+});
+
+test('Speak: built-in voice creates WAV / MP3 files directly, and is offered when recording fails', async ({ page }) => {
+  await page.addInitScript(() => {
+    const ac = new AudioContext();
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: { getVoices: () => [{ voiceURI: 'cloud', name: 'Google UK English Female', lang: 'en-GB', localService: false }], cancel() {}, pause() {}, resume() {}, addEventListener() {}, speak(u) { setTimeout(() => u.onend && u.onend(), 300); } } });
+    window.SpeechSynthesisUtterance = function (t) { this.text = t; };
+    // a capture that carries only silence (what a cloud voice produces)
+    navigator.mediaDevices.getDisplayMedia = async () => { const d = ac.createMediaStreamDestination(); const c = document.createElement('canvas'); c.width = c.height = 8; return new MediaStream([c.captureStream(1).getVideoTracks()[0], ...d.stream.getAudioTracks()]); };
+  });
+  const problems = watch(page);
+  await createProfile(page, 'Builtin');
+  await page.evaluate(() => ulyOS.Speech.open());
+  await page.waitForSelector('.spk textarea');
+  await page.uncheck('.spk input[type=checkbox]');
+  await page.fill('.spk textarea', 'This file was made with the built in voice.');
+  const wav = async (name) => { const d = require('fs').readFileSync(name); return { riff: d.slice(0, 4).toString(), wave: d.slice(8, 12).toString(), rate: d.readUInt32LE(24), secs: (d.length - 44) / 2 / d.readUInt32LE(24), peak: Math.max(...new Int16Array(d.buffer.slice(d.byteOffset + 44, d.byteOffset + 44 + 20000)).slice(0, 8000)) }; };
+  // 1) built-in engine selected explicitly → WAV
+  await page.selectOption('select[aria-label="Voice for the audio file"]', 'builtin');
+  const saveWith = async (fmt) => {
+    await page.selectOption('select[aria-label="Audio format"]', fmt);
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), (async () => { await page.click('.spk button:has-text("Save audio")'); await page.waitForSelector('.modal input'); await page.selectOption('.modal select', 'download'); await page.click('.modal button:has-text("Save")'); })()]);
+    return dl;
+  };
+  const dl1 = await saveWith('wav');
+  expect(dl1.suggestedFilename()).toMatch(/\.wav$/);
+  const w = await wav(await dl1.path());
+  expect(w.riff + w.wave).toBe('RIFFWAVE'); expect(w.secs).toBeGreaterThan(1.5); expect(w.peak).toBeGreaterThan(1000);   // real speech, not silence
+  const dl2 = await saveWith('mp3');
+  const mp3 = require('fs').readFileSync(await dl2.path());
+  expect(mp3.length).toBeGreaterThan(5000); expect(mp3[0] === 0xff || mp3.slice(0, 3).toString() === 'ID3').toBe(true);
+  // 2) browser engine records silence → offered the built-in voice, accepting it yields a real file
+  await page.selectOption('select[aria-label="Voice for the audio file"]', 'browser');
+  await page.selectOption('select[aria-label="Audio format"]', 'wav');
+  await page.click('.spk button:has-text("Save audio")');
+  await page.click('.modal button:has-text("Continue")');
+  await expect(page.locator('.modal')).toContainText('could not be recorded', { timeout: 20000 });
+  const [dl3] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), (async () => { await page.click('.modal button:has-text("Use built-in voice")'); await page.waitForSelector('.modal input'); await page.selectOption('.modal select', 'download'); await page.click('.modal button:has-text("Save")'); })()]);
+  expect((await wav(await dl3.path())).secs).toBeGreaterThan(1.5);
   expect(problems).toEqual([]);
 });

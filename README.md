@@ -38,6 +38,12 @@ Settings → Sync. Settings, desktop layout, widgets and app data are packed int
 - **App Store**: a curated catalog of the built-in apps and well-known web apps. “Add” creates a desktop shortcut (a link — nothing is installed); the catalog lives in `js/store.js`, add your own entries there.
 - **Cloud drives and network folders** (Settings → Sync → section 4): ulyOS never logs in to Google Drive, iCloud, OneDrive, Box, Dropbox or Nextcloud. You choose a folder on your computer that their desktop app keeps in sync (or a mounted SMB / NAS share), and ulyOS reads and writes an encrypted `ulyos-sync.ulysync` and, on request, `ulyOS-settings.json` there. Needs Chrome or Edge on a computer; on phones use **Share…** (iCloud Drive / Drive via the share sheet). Direct API connectors (OAuth) are deliberately not included: they would need your own registered client IDs and a wider network policy.
 
+## Beam (send between devices) and audio export
+- **Beam** connects two devices directly with WebRTC (DTLS-encrypted, no server). One taps **Start** and shows a QR / code, the other taps **Join** and scans or pastes it, then shows a reply code that the first scans or pastes. Both screens show the same 6-digit number (derived from both devices' certificate fingerprints) — if they match, nobody is in the middle. Then send files (the receiver accepts each one), text, or your settings file. On the same Wi-Fi nothing leaves your network; “Also try over the internet” adds a public STUN server (Google's) which learns your public IP.
+- It is **not** the LocalSend app: LocalSend needs a local web server and UDP discovery that web pages cannot run. Beam is the browser-to-browser equivalent (ulyOS ↔ ulyOS), with codes replacing discovery. Some Wi-Fi networks (guest networks, “client isolation”) block device-to-device traffic and Beam will say it could not connect.
+- **Speak → Save audio**: *Browser voice* records the tab's audio while it speaks (cloud voices cannot be captured); *Built-in voice* synthesizes the file itself with eSpeak (robotic, 12 languages, works offline and always). WAV or MP3.
+- Third-party code in `vendor/` is listed in `vendor/README.md`; the eSpeak build is GPL-3.0-or-later.
+
 ## Tests
 ```bash
 npm ci

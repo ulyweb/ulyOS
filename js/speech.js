@@ -50,10 +50,44 @@
     for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 0x7fff, true);
     return new Blob([buf], { type: 'audio/wav' });
   }
-  function loadLame() {
-    if (window.lamejs) return Promise.resolve();
-    return new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'vendor/lamejs.min.js'; sc.onload = res; sc.onerror = () => rej(new Error('MP3 encoder could not be loaded')); document.head.append(sc); });
+  const loadScript = (src, what) => new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = src; sc.onload = res; sc.onerror = () => rej(new Error(what + ' could not be loaded')); document.head.append(sc); });
+  const loadLame = () => (window.lamejs ? Promise.resolve() : loadScript('vendor/lamejs.min.js', 'The MP3 encoder'));
+
+  /* ---------- built-in voice (eSpeak): synthesizes the audio itself, so saving always works, offline too ---------- */
+  const BUILTIN = [['en/en-us', 'English (US)'], ['en/en-rp', 'English (UK)'], ['en/en', 'English'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'], ['it', 'Italian'], ['pt', 'Portuguese'], ['nl', 'Dutch'], ['pl', 'Polish'], ['sv', 'Swedish'], ['tr', 'Turkish']];
+  S.builtinVoices = BUILTIN;
+  const loadedVoices = new Set();
+  let espeakReady = null;
+  async function loadEspeak(voice) {
+    if (!window.meSpeak) await loadScript('vendor/mespeak.js', 'The built-in voice engine');
+    if (!espeakReady) espeakReady = fetch('vendor/espeak/mespeak_config.json').then((r) => { if (!r.ok) throw new Error('voice data missing'); return r.json(); }).then((cfg) => window.meSpeak.loadConfig(cfg));
+    await espeakReady;
+    if (!loadedVoices.has(voice)) {
+      const r = await fetch('vendor/espeak/voices/' + voice + '.json'); if (!r.ok) throw new Error('voice data missing');
+      const vj = await r.json();
+      await new Promise((res) => window.meSpeak.loadVoice(vj, res)); loadedVoices.add(voice);
+    }
   }
+  /** Synthesize with the built-in voice → { pcm: Float32Array, rate } */
+  S.synthesize = async function (text, o = {}) {
+    text = String(text || '').trim();
+    if (!text) throw new Error('Type something to speak first');
+    const voice = BUILTIN.some((v) => v[0] === o.voice) ? o.voice : 'en/en-us', p = { ...prefs(), ...o };
+    await loadEspeak(voice);
+    const buf = window.meSpeak.speak(text.slice(0, 20000), {
+      rawdata: 'default', voice, speed: Math.round(175 * Math.min(2, Math.max(0.5, +p.rate || 1))),
+      pitch: Math.round(Math.min(99, Math.max(10, 50 * (+p.pitch || 1)))), amplitude: Math.round(Math.min(200, Math.max(10, 100 * (p.volume == null ? 1 : +p.volume)))),
+    });
+    if (!buf || buf.byteLength < 100) throw new Error('The built-in voice could not speak that text');
+    const dv = new DataView(buf), rate = dv.getUint32(24, true), n = (buf.byteLength - 44) >> 1, pcm = new Float32Array(n);
+    for (let i = 0; i < n; i++) pcm[i] = dv.getInt16(44 + i * 2, true) / 32768;
+    return { pcm, rate };
+  };
+  /** Audio file (Blob) made with the built-in voice. */
+  S.renderBuiltin = async function (text, fmt, o) {
+    const { pcm, rate } = await S.synthesize(text, o);
+    return fmt === 'mp3' ? encodeMp3(pcm, rate) : encodeWav(pcm, rate);
+  };
   async function encodeMp3(pcm, rate) {
     await loadLame();
     const enc = new window.lamejs.Mp3Encoder(1, rate, 128), i16 = new Int16Array(pcm.length);
@@ -63,6 +97,7 @@
     const end = enc.flush(); if (end.length) out.push(new Uint8Array(end));
     return new Blob(out, { type: 'audio/mpeg' });
   }
+  S.CANT_RECORD = /Nothing was captured|No audio was shared/;   // errors where the built-in voice is the right fallback
   S.canRecord = !!(supported && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia && window.MediaRecorder);
   /** Speak `text` and resolve with a Blob (audio/wav or audio/mpeg). */
   S.record = async function (text, fmt, status = () => {}) {
@@ -134,16 +169,32 @@
       const inp = h('input', { type: 'range', min, max, step, value: p[key], 'aria-label': label, oninput: () => { p[key] = +inp.value; out.textContent = fmt(p[key]); save(p); } });
       return h('label', {}, label, inp, out);
     };
+    const engSel = h('select', { class: 'input sm', 'aria-label': 'Voice for the audio file', onchange: () => { bvSel.hidden = engSel.value !== 'builtin'; } },
+      h('option', { value: 'browser', text: 'Browser voice (records this tab)' }), h('option', { value: 'builtin', text: 'Built-in voice (robotic, always works)' }));
+    const bvSel = h('select', { class: 'input sm', hidden: true, 'aria-label': 'Built-in voice language' }, S.builtinVoices.map(([v, l]) => h('option', { value: v, text: l })));
     const fmtSel = h('select', { class: 'input sm', 'aria-label': 'Audio format' }, h('option', { value: 'wav', text: 'WAV (lossless)' }), h('option', { value: 'mp3', text: 'MP3 (smaller)' }));
     const saveAudio = async () => {
       const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim(), text = sel || ta.value;
       if (!text.trim()) { ta.focus(); ui.toast('Type something to speak first', { type: 'info' }); return; }
-      if (!(await ui.confirm({ title: 'Record speech to a file', message: 'Your browser will ask what to share. Choose “This tab” and make sure “Share tab audio” is ticked, then ulyOS speaks the text and saves it as ' + fmtSel.value.toUpperCase() + '. Nothing leaves your device.', okText: 'Continue' }))) return;
+      const fmt = fmtSel.value, name = 'speech-' + ulyOS.util.stamp() + '.' + fmt, kind = fmt.toUpperCase() + ' audio';
+      const builtin = async () => {
+        now.textContent = 'Creating audio with the built-in voice…';
+        try { const blob = await S.renderBuiltin(text, fmt, { voice: bvSel.value }); now.textContent = ''; await saveFile(blob, name, kind); }
+        catch (err) { now.textContent = ''; ui.toast(err.message, { type: 'err', timeout: 7000 }); }
+      };
+      if (engSel.value === 'builtin') { await builtin(); return; }
+      if (!S.canRecord) { if (await ui.confirm({ title: 'Recording is not available here', message: 'This browser cannot record the tab’s audio. Create the file with the built-in voice instead? It sounds robotic but works everywhere.', okText: 'Use built-in voice' })) await builtin(); return; }
+      if (!(await ui.confirm({ title: 'Record speech to a file', message: 'Your browser will ask what to share. Choose “This tab” and make sure “Share tab audio” is ticked, then ulyOS speaks the text and saves what it hears as ' + fmt.toUpperCase() + '. Nothing leaves your device. (Prefer a guaranteed result? Cancel and pick “Built-in voice”.)', okText: 'Continue' }))) return;
       try {
-        const blob = await S.record(text, fmtSel.value, (m) => { now.textContent = m; });
+        const blob = await S.record(text, fmt, (m) => { now.textContent = m; });
         now.textContent = '';
-        await saveFile(blob, 'speech-' + ulyOS.util.stamp() + '.' + fmtSel.value, fmtSel.value.toUpperCase() + ' audio');
-      } catch (err) { now.textContent = ''; S.stop(); ui.toast(err.name === 'NotAllowedError' ? 'Recording was cancelled' : err.message, { type: 'err', timeout: 7000 }); }
+        await saveFile(blob, name, kind);
+      } catch (err) {
+        now.textContent = ''; S.stop();
+        if (err.name === 'NotAllowedError') { ui.toast('Recording was cancelled', { type: 'info' }); return; }
+        if (S.CANT_RECORD.test(err.message) && await ui.confirm({ title: 'This voice could not be recorded', message: 'Your browser plays this voice outside the page, so nothing could be captured. Create the file with the built-in voice instead? It sounds robotic but always works.', okText: 'Use built-in voice' })) { await builtin(); return; }
+        ui.toast(err.message, { type: 'err', timeout: 7000 });
+      }
     };
     /** Ask where to put a file: the encrypted Files sandbox (Documents/Speak) and/or a normal download. */
     const saveFile = async (blob, defName, kind) => {
@@ -198,9 +249,9 @@
         h('button', { class: 'btn', html: icon('upload', 14) + ' Open…', onclick: openText })),
       h('div', { class: 'spk-row' }, h('label', {}, perWord, 'Speak each word as I type'), voiceSel),
       h('div', { class: 'spk-row spk-save' },
-        h('b', { text: 'Save as audio' }), fmtSel,
-        h('button', { class: 'btn', html: icon('download', 14) + ' Record to file…', disabled: !S.canRecord, title: S.canRecord ? 'Speaks the text and saves what is heard' : 'Needs Chrome or Edge on a computer', onclick: saveAudio }),
-        h('span', { class: 'set-desc', text: S.canRecord ? 'Choose “This tab” and tick “Share tab audio” in the browser prompt.' : 'Not available in this browser.' })),
+        h('b', { text: 'Save as audio' }), fmtSel, engSel, bvSel,
+        h('button', { class: 'btn', html: icon('download', 14) + ' Save audio…', title: 'Create an audio file from the text', onclick: saveAudio }),
+        h('span', { class: 'set-desc', text: 'Browser voice: choose “This tab” and tick “Share tab audio” in the prompt. Built-in voice: made directly, no prompt.' })),
       h('div', { class: 'spk-row' }, slider('rate', 0.5, 2, 0.1, 'Speed', (v) => (+v).toFixed(1) + '×'), slider('pitch', 0.5, 1.8, 0.1, 'Pitch', (v) => (+v).toFixed(1)), slider('volume', 0, 1, 0.05, 'Volume', (v) => Math.round(v * 100) + '%')),
       now);
     win.onClose = () => S.stop();

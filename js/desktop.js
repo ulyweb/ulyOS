@@ -311,6 +311,7 @@
     settings: { name: 'Settings', icon: 'settings', open: () => SettingsApp.open() },
     speak: { name: 'Speak', icon: 'volume', open: () => ulyOS.Speech.open() },
     store: { name: 'App Store', icon: 'store', open: () => ulyOS.Store.open() },
+    beam: { name: 'Beam', icon: 'send', open: () => ulyOS.Beam.open() },
   };
   const DEFAULT_ICONS = [
     { id: 'files', kind: 'sys', sys: 'files', name: 'Files' },
@@ -326,6 +327,7 @@
     { id: 'settings', kind: 'sys', sys: 'settings', name: 'Settings' },
     { id: 'speak', kind: 'sys', sys: 'speak', name: 'Speak' },
     { id: 'store', kind: 'sys', sys: 'store', name: 'App Store' },
+    { id: 'beam', kind: 'sys', sys: 'beam', name: 'Beam' },
   ];
 
   /** Icon markup for an icon record (used by desktop tiles, taskbar, window chrome). */
@@ -643,6 +645,11 @@
     if (!store.get('ulyos.migr.addSpeak', false)) {   // one-time: the new Speak app appears on existing desktops
       if (!Desktop.icons.some((i) => i.id === 'speak')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'speak') });
       store.set('ulyos.migr.addSpeak', true);
+      if (saved) saveIcons();
+    }
+    if (!store.get('ulyos.migr.addBeam', false)) {   // one-time: the Beam icon appears on existing desktops
+      if (!Desktop.icons.some((i) => i.id === 'beam')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'beam') });
+      store.set('ulyos.migr.addBeam', true);
       if (saved) saveIcons();
     }
     if (!store.get('ulyos.migr.addStore', false)) {   // one-time: the App Store icon appears on existing desktops

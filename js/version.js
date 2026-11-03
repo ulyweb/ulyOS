@@ -3,8 +3,13 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.12.0';
+ulyOS.version = '1.13.0';
 ulyOS.CHANGELOG = [
+  { v: '1.13.0', d: '2026-11-03', n: [
+    'Beam: send files, pictures, text and your settings between two devices (PC ↔ phone) over a direct, end-to-end encrypted WebRTC link. Pair by scanning a QR code or pasting a code, check the same 6-digit number on both screens, and the receiver accepts each file. No server, no account. (It cannot talk to the LocalSend app itself — browsers cannot run its server or network discovery — it does the same job ulyOS ↔ ulyOS.)',
+    'Speak → Save audio now always works: choose the new Built-in voice (eSpeak) to create a WAV or MP3 directly, and when recording a browser voice fails ulyOS offers to switch to it automatically',
+    'Vendored libraries (see vendor/README.md): eSpeak / meSpeak (GPL-3.0+), qrcode-generator (MIT), jsQR (Apache-2.0)',
+  ] },
   { v: '1.12.0', d: '2026-11-03', n: [
     'Dark / light theme: a sun / moon button next to the clock, and Settings → Appearance → Theme (Dark, Light, Auto follows your device). The profile screen remembers the last theme',
     'App Store: about 45 apps (the built-in ones plus well-known web apps) in categories with search; Add puts a shortcut on the desktop, Try opens it without adding. Nothing is installed',

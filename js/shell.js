@@ -428,6 +428,7 @@
       { label: 'New text document', icon: 'filePlus', action: () => ulyOS.FS.newDocument() },
       { label: 'New URL shortcut…', icon: 'plus', action: API().newShortcut },
       { label: 'Open Files', icon: 'folder', action: () => ulyOS.FS.open() }, { separator: true },
+      ...(ulyOS.Capture ? ulyOS.Capture.menuItems().map((m, i) => (i === 0 ? { ...m, label: 'Screenshot…   Ctrl+Shift+S' } : m)).concat([{ separator: true }]) : []),
       { label: 'Close window', icon: 'x', disabled: !WM.focused(), action: () => WM.focused() && WM.close(WM.focused()) },
     ]);
     add(h('button', { class: 'mb-btn', text: 'View' }), () => [

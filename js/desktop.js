@@ -698,6 +698,8 @@
       { label: 'Auto-arrange icons', icon: 'list', action: autoArrange },
       { label: 'Restore stock icons' + (miss.length ? ' (' + miss.length + ')' : ''), icon: 'refresh', disabled: !miss.length, action: restoreDefaults },
       { separator: true },
+      { label: 'Screenshot', icon: 'image', submenu: ulyOS.Capture ? ulyOS.Capture.menuItems() : [] },
+      { separator: true },
       { label: 'Files', icon: 'folder', action: () => SYS_APPS.files.open() },
       { label: 'Task Manager', icon: 'activity', action: () => SYS_APPS.taskmgr.open() },
       { label: 'Settings', icon: 'settings', action: () => SettingsApp.open() },
@@ -1136,7 +1138,7 @@
     const paintPhotos = (open) => {
       const L = ulyOS.landscapes;
       if (ulyOS.config.OFFLINE) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Photos are loaded from Wikimedia Commons, so they are not available in the offline build. The drawn space and anime-style scenes above work offline.' })); return; }
-      if (!open) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Genuine photographs from Cassini and Hubble (public domain / CC0). They are not stored in ulyOS: when you open this list or pick one, your browser fetches a resized copy from commons.wikimedia.org.' }), h('button', { class: 'btn sm', text: 'Show photos…', onclick: () => paintPhotos(true) })); return; }
+      if (!open) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Genuine NASA photographs (Space Station, Artemis, Cassini, Juno, Hubble; public domain / CC0). They are not stored in ulyOS: when you open this list or pick one, your browser fetches a resized copy from commons.wikimedia.org.' }), h('button', { class: 'btn sm', text: 'Show photos…', onclick: () => paintPhotos(true) })); return; }
       photoBox.replaceChildren(h('div', { class: 'wp-list' }, L.photos.map((p) => h('button', {
         class: 'wp-tile' + (settings.wallpaper === 'photo:' + p.key ? ' active' : ''), title: p.label + ' — ' + p.credit,
         onclick: () => { eff = {}; Settings.set('wallpaper', 'photo:' + p.key); applyWallpaper(); paintPhotos(true); paintTiles(); ulyOS.audit("Wallpaper changed to photo '" + p.label + "' (" + p.credit + ')', 'info'); },

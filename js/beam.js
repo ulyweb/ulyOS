@@ -128,7 +128,7 @@
     const pending = new Map();              // outgoing offers waiting for accept / reject
     let cur = null;                         // file currently being received
     const list = h('div', { class: 'bm-list' });
-    B._cleanup = () => { try { if (link) link.close(); } catch { /* ignore */ } link = null; B._link = null; cur = null; helloSent = false; };
+    B._cleanup = () => { try { if (link) link.close(); } catch { /* ignore */ } link = null; B._link = null; B._send = null; cur = null; helloSent = false; };
     bus.on('session:lock', () => { B._cleanup(); if (root.isConnected) home('The screen was locked, so the connection was closed.'); });
 
     const note = (t) => h('p', { class: 'set-desc', text: t });
@@ -256,6 +256,7 @@
       r.status.remove(); r.el.querySelector('.stor-bar').remove(); r.el.append(h('div', { class: 'bm-text', text }));
       if (who !== 'You') r.actions.append(h('button', { class: 'btn sm', text: 'Copy', onclick: () => ulyOS.clip.copy(text).then(() => ui.toast('Copied', { type: 'ok', timeout: 1400 })).catch(() => {}) }));
     }
+    B._send = (fl) => sendFiles(fl);
     async function sendFiles(files) {
       for (const f of files) {
         if (!link || !link.open) { ui.toast('Not connected', { type: 'err' }); return; }

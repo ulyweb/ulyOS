@@ -3,8 +3,14 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.17.0';
+ulyOS.version = '1.18.0';
 ulyOS.CHANGELOG = [
+  { v: '1.18.0', d: '2026-11-03', n: [
+    'Screenshot, like the Edge right-click menu: right-click the desktop → Screenshot (or press Ctrl+Shift+S, or File → Screenshot). Drag a region or capture the whole screen, then Save to Files (Pictures/Screenshots), Download, Copy, or Send to device through Beam',
+    'Visual search: capture an area and search it with Google Lens, Bing Visual Search or TinEye (the picture is copied; press Ctrl+V on the search page). Nothing is shared unless you choose it',
+    'Real photographs: 10 more genuine NASA photos (Earth at night from the Space Station, auroras, Earthrise from Artemis II, the centre of the Milky Way, Jupiter), all verified public domain, loaded only when you pick them',
+    'Fixed: the emoji in the profile picture circle is centred (a style clash had pushed it to the left)',
+  ] },
   { v: '1.17.0', d: '2026-11-03', n: [
     'Menu bar clock is fully customisable (Settings → Dock & Menu bar → Date & time): Digital, Analog, LCD or time-only style; 12 / 24-hour; seconds; AM/PM; five date formats; side-by-side or stacked layout; font, weight, size and colour',
     'Desktop icons are alive again: full-colour icons gently float, each with its own motion (pulsing, flying, swaying, spinning) that speeds up on hover; switched off by "reduce animations"',

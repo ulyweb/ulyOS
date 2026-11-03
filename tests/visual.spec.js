@@ -57,8 +57,9 @@ test('profile pictures: emoji and photo at creation, in the picker, the taskbar 
   await page.waitForSelector('.auth-form');
   await page.fill('input[placeholder="Profile name"]', 'Pic');
   await page.click('.av-tabs button:has-text("Emoji")');
-  await page.click('.av-emoji button[aria-label="🦊"]');
+  await page.click('.av-grid button[aria-label="🦊"]');
   await expect(page.locator('.prev .avatar')).toContainText('🦊');
+  expect(await page.evaluate(() => { const a = document.querySelector('.prev .avatar'); const r = document.createRange(); r.selectNodeContents(a); const t = r.getBoundingClientRect(), b = a.getBoundingClientRect(); return Math.abs((t.left + t.width / 2) - (b.left + b.width / 2)) < 2; })).toBe(true);   // the emoji sits in the middle of the circle
   await page.fill('.pwc input[placeholder="Password"]', PW); await page.fill('.pwc input[placeholder="Confirm"]', PW);
   await page.click('button:has-text("Create profile")');
   await page.waitForSelector('.desk-icon', { timeout: 45000 });
@@ -247,4 +248,41 @@ test('create-profile screen scrolls on a short window instead of clipping the to
   await page.waitForSelector('#auth');
   const top = await page.evaluate(() => { const a = document.querySelector('#auth'); const first = a.firstElementChild.getBoundingClientRect(); return [first.top, a.scrollHeight > a.clientHeight]; });
   expect(top[0]).toBeGreaterThanOrEqual(0);   // the first element is never pushed above the top edge
+});
+
+test('screenshot: region select, save to Files, copy, visual search, send via Beam prompt', async ({ page, context }) => {
+  const problems = watch(page);
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+  await page.addInitScript(() => {
+    // simulated "share this tab": a canvas stream with a recognisable picture
+    navigator.mediaDevices.getDisplayMedia = async () => {
+      const c = document.createElement('canvas'); c.width = 1280; c.height = 720; const g = c.getContext('2d');
+      const draw = () => { g.fillStyle = '#2a6df4'; g.fillRect(0, 0, 1280, 720); g.fillStyle = '#ffd54a'; g.fillRect(100, 100, 300, 200); };
+      draw(); setInterval(draw, 50);
+      return c.captureStream(20);
+    };
+    window.__opened = []; window.open = (u) => { window.__opened.push(u); return null; };
+  });
+  await createProfile(page, 'Shot');
+  await page.evaluate(() => ulyOS.vault.set('ulyos.tour.seen', '1'));
+  // right-click desktop → Screenshot submenu exists
+  await page.evaluate(() => ulyOS.WM.all().forEach((w) => ulyOS.WM.close(w, { force: true })));
+  await page.evaluate(() => document.querySelector('#desktop').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 800, clientY: 600 })));
+  await expect(page.locator('.ctx-item:has-text("Screenshot")')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+Shift+S');
+  await page.waitForSelector('.cap-ov');
+  await page.mouse.move(200, 200); await page.mouse.down(); await page.mouse.move(520, 420, { steps: 6 }); await page.mouse.up();
+  await page.waitForSelector('.cap-modal img');
+  const dim = await page.evaluate(() => document.querySelector('.cap-modal .set-desc').textContent);
+  expect(dim).toMatch(/\d+ × \d+ px/);
+  await page.click('.cap-modal button:has-text("Save to Files")');
+  await expect(page.locator('.toast.ok:has-text("Pictures/Screenshots")')).toHaveCount(1);
+  expect(await page.evaluate(async () => { const f = await ulyOS.FS.readSandboxFile('Pictures/Screenshots'); return true; })).toBe(true);
+  await page.click('.cap-modal button:has-text("Visual search")');
+  expect(await page.evaluate(() => window.__opened)).toEqual(['https://lens.google.com/']);
+  await page.click('.cap-modal button:has-text("Send to device")');
+  await page.waitForSelector('.window:has-text("Beam")');
+  await page.keyboard.press('Escape');
+  expect(problems).toEqual([]);
 });

@@ -199,6 +199,16 @@
     P('pillars', 'Pillars of Creation', 'Pillars of creation 2014 HST WFC3-UVIS full-res denoised.jpg', 'NASA/ESA Hubble · public domain'),
     P('horsehead', 'Horsehead and Flame nebulae', 'Ic434 Horsehead Nebula B33 Flame Nebula Ngc2024.jpg', 'Wikimedia Commons · CC0'),
     P('horsehead2', 'Horsehead nebula field', 'Horsehead flame nebula logoga.jpg', 'Wikimedia Commons · CC0'),
+    P('earth-aurora', 'Aurora and cities from orbit', 'ISS-43 Earth sunrise, aurora and sparling cities in northern Europe.jpg', 'NASA / ISS · public domain'),
+    P('earth-europe-night', 'Europe at night', 'ISS-65 Europe, city lights from space.jpg', 'NASA / ISS · public domain'),
+    P('earth-java', 'Lights of Java', 'Lights of Java.jpg', 'NASA / ISS · public domain'),
+    P('earth-japan', 'Japan city lights', 'City lights outline southern Japan from Fukuoka to Tokyo (iss073e0824492).jpg', 'NASA / ISS · public domain'),
+    P('aurora-jem', 'Aurora from the Space Station', 'ISS-45 Aurora and Stars From the Space Station\'s JEM Window.jpg', 'NASA / ISS · public domain'),
+    P('aurora-antarctica', 'Aurora above Antarctica', 'ISS-52 Aurora australis above Antarctica.jpg', 'NASA / ISS · public domain'),
+    P('aurora-night', 'Aurora at night', 'Image of aurora at night from the ISS 01.jpg', 'NASA / ISS · public domain'),
+    P('earthrise-orion', 'Earthrise (Artemis II, Orion)', 'Earthrise Captured by Orion (art002e016299).jpg', 'NASA · public domain'),
+    P('milkyway-centre', 'Centre of the Milky Way', 'Center of the Milky Way Galaxy IV – Composite.jpg', 'NASA / ESA / CXC · public domain'),
+    P('jupiter-grs', 'Jupiter, Great Red Spot', 'PIA00022 Jupiter Great Red Spot Mosaic.jpg', 'NASA/JPL · public domain'),
   ];
   L.photoUrl = (key, w = 1920) => { const p = L.photos.find((x) => x.key === key); return p ? 'https://commons.wikimedia.org/wiki/Special:FilePath/' + encodeURIComponent(p.file.replace(/ /g, '_')) + '?width=' + w : ''; };
 })();

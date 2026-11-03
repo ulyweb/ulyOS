@@ -60,6 +60,12 @@
     settings: tile('settings', '#9aa3b5', '#4a5266',
       '<defs>' + g('gm', '#ffffff', '#b9c2d4') + '</defs>' +
       '<g transform="translate(32 32)"><g fill="url(#gm)"><rect x="-4" y="-25" width="8" height="12" rx="2.5"/><rect x="-4" y="-25" width="8" height="12" rx="2.5" transform="rotate(45)"/><rect x="-4" y="-25" width="8" height="12" rx="2.5" transform="rotate(90)"/><rect x="-4" y="-25" width="8" height="12" rx="2.5" transform="rotate(135)"/><rect x="-4" y="-25" width="8" height="12" rx="2.5" transform="rotate(180)"/><rect x="-4" y="-25" width="8" height="12" rx="2.5" transform="rotate(225)"/><rect x="-4" y="-25" width="8" height="12" rx="2.5" transform="rotate(270)"/><rect x="-4" y="-25" width="8" height="12" rx="2.5" transform="rotate(315)"/><circle r="18"/></g><circle r="9" fill="#5b6479"/><circle r="9" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.5"/><circle r="4" fill="#cfd6e6"/></g>'),
+    /* Jarvis — arc-reactor ring with a spark */
+    jarvis: tile('jarvis', '#0b2a4a', '#041022',
+      '<defs>' + g('jr', '#bff6ff', '#38bdf8') + '</defs>' +
+      '<circle cx="32" cy="32" r="20" fill="none" stroke="#38bdf8" stroke-opacity=".35" stroke-width="2"/><circle cx="32" cy="32" r="15" fill="none" stroke="url(#jr)" stroke-width="3.2"/>' +
+      '<g stroke="#7ee7ff" stroke-width="2.6" stroke-linecap="round"><path d="M32 12v4M32 48v4M12 32h4M48 32h4M18 18l3 3M43 43l3 3M46 18l-3 3M21 43l-3 3"/></g>' +
+      '<path d="M32 22l8.6 15h-17.2z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/><circle cx="32" cy="33" r="3.6" fill="#7df9ff"/>'),
     /* Task Manager — monitor with pulse line and bars */
     taskmgr: tile('taskmgr', '#2e3a52', '#0f1626',
       '<rect x="9" y="13" width="46" height="34" rx="5" fill="#0a1020" stroke="#6ee7b7" stroke-opacity=".55" stroke-width="2"/>' +

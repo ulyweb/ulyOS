@@ -325,6 +325,7 @@
     store: { name: 'App Store', icon: 'store', open: () => ulyOS.Store.open() },
     beam: { name: 'Beam', icon: 'send', open: () => ulyOS.Beam.open() },
     live: { name: 'Gemini Live', icon: 'mic', open: () => ulyOS.Gemini.openLive() },
+    jarvis: { name: 'Jarvis', icon: 'sparkles', open: () => ulyOS.Jarvis.open() },
   };
   /* The desktop shows four tools and one folder; everything else lives in the Apps folder (and the dock / Start menu / App Store). */
   const A = 'apps';
@@ -336,6 +337,7 @@
     { id: 'apps', kind: 'folder', name: 'Apps', glyph: 'folder', tint: '#fbbf24' },
     { id: 'files', kind: 'sys', sys: 'files', name: 'Files', folder: A },
     { id: 'taskmgr', kind: 'sys', sys: 'taskmgr', name: 'Task Manager', folder: A },
+    { id: 'jarvis', kind: 'sys', sys: 'jarvis', name: 'Jarvis', folder: A },
     { id: 'settings', kind: 'sys', sys: 'settings', name: 'Settings', folder: A },
     { id: 'qrseal', kind: 'local', name: 'QR Seal', file: 'apps/qrseal.html', glyph: 'qr', mem: 60, w: 980, h: 760, tint: '#c4b5fd', folder: A },
     { id: 'systemvault', kind: 'local', name: 'System Vault', file: 'apps/systemvault.html', glyph: 'key', mem: 62, w: 1100, h: 760, tint: '#fb7185', folder: A },
@@ -736,6 +738,11 @@
       store.set('ulyos.migr.addBeam', true);
       if (saved) saveIcons();
     }
+    if (!store.get('ulyos.migr.addJarvis', false)) {   // one-time: the Jarvis toolkit appears in the Apps folder on existing desktops
+      if (!Desktop.icons.some((i) => i.id === 'jarvis')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'jarvis') });
+      store.set('ulyos.migr.addJarvis', true);
+      if (saved) saveIcons();
+    }
     if (!store.get('ulyos.migr.addStore', false)) {   // one-time: the App Store icon appears on existing desktops
       if (!Desktop.icons.some((i) => i.id === 'store')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'store') });
       store.set('ulyos.migr.addStore', true);
@@ -1101,6 +1108,7 @@
         ['🌐 Nothing to install, works anywhere', 'It is a web page: open it on a laptop, tablet or phone. An offline build runs without internet, and encrypted sync keeps your devices identical when you want that.'],
         ['🧰 One tidy workspace', 'Encrypted files, a password and key generator, QR tools, a crypto guide, widgets, voice (Speak) and Gemini Live — instead of a dozen tabs and accounts.'],
         ['🤝 Move data without the cloud', 'Beam sends files and settings device-to-device, end-to-end encrypted. Sync can use your own drive or network share. Only encrypted data ever leaves the device.'],
+        ['🏷️ Disclosure', 'The built-in Crypto Compass app contains the author’s referral links (Coinbase, Robinhood, Uphold, Tangem). Each is marked “referral”, and the author may benefit if you sign up or buy through them. ulyOS never signs you up or buys anything for you.'],
         ['🔍 Transparent and tested', 'Open source, no trackers, a visible audit log, a strict Content-Security-Policy and automated tests on every change.'],
         ['👥 Good for', 'People handling sensitive documents, shared or borrowed computers (each profile is separately encrypted), travellers who need an offline copy, and anyone who wants control over their own data.'],
       ].map(([t, d]) => h('div', { class: 'why-card' }, h('b', { text: t }), h('p', { text: d })))),

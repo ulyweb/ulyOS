@@ -22,6 +22,7 @@ Passwords: at least 10 characters and about 45 bits of estimated entropy. There 
 - Third-party sites opened in a window run in a sandboxed iframe with no ability to navigate ulyOS itself. Bundled apps are separate same-origin documents with their own policy.
 - Settings, widget and sync imports are validated and sanitised; sync bundles can never overwrite sync settings, the audit log or non-string values.
 - Key-derivation parameters read from storage, backups or sync bundles are range-checked.
+- **Loopback only for local tools.** The CSP allows `http://127.0.0.1:*` and `http://localhost:*` (connect and frame) so the Jarvis toolkit can detect and embed locally running tools; no other plain-http origin is allowed. A test asserts this. Embedded pages run in the same sandboxed frame as other third-party sites.
 - Automated tests and lint run on every push (`.github/workflows/test.yml`), including the CSP rules and a secret scan.
 
 ## Network

@@ -96,7 +96,9 @@
     const play = (b64, rate) => {
       const f = pcm16(b64ToBytes(b64));
       const buf = S.ctx.createBuffer(1, f.length, rate); buf.copyToChannel(f, 0);
-      const src = S.ctx.createBufferSource(); src.buffer = buf; src.connect(S.ctx.destination);
+      const src = S.ctx.createBufferSource(); src.buffer = buf;
+      if (!S.an) { S.an = S.ctx.createAnalyser(); S.an.fftSize = 128; S.an.connect(S.ctx.destination); }   // lets the Jarvis face move with the voice
+      src.connect(S.an);
       const at = Math.max(S.ctx.currentTime + 0.03, S.nextAt); src.start(at); S.nextAt = at + buf.duration;
       S.sources.add(src); src.onended = () => S.sources.delete(src); S.played++;
     };

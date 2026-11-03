@@ -81,13 +81,29 @@ npm test        # lint + browser tests
 ## Editing the bundled apps
 `apps/*.html` and `apps/js/*` are generated from `tools/app-sources/*.html` by `node tools/build-apps.js` (it moves each app's inline script into a file, rewrites inline `on*=` handlers to `data-on-*` run by `js/app-bridge.js`, and adds a strict per-app Content-Security-Policy). Edit the source, run the tool, commit both.
 
+## Jarvis AI assistant toolkit
+
+Apps folder → **Jarvis**. An agent with a mind, a mouth, a face and optional hands, inspired by Jared Rhodenizer's open [fullstack-agent](https://github.com/jaredrhod/fullstack-agent) stack ([jaredrhod.com](https://jaredrhod.com), [tour video](https://www.youtube.com/watch?v=FiOTrxq9ckM)). His originals need a local install, Claude Code and local speech models, so they cannot run inside a web page; ulyOS has its own built-in version of each piece (`js/jarvis.js`, original code) and can embed his real local servers when they run on your computer.
+
+| Piece | In ulyOS | His original |
+|---|---|---|
+| Mind (memory) | **Memory** tab: Markdown notes in encrypted Files → `Jarvis Vault` (profile, daily notes, `[[links]]`, backlinks, search, jobs that prime the AI, export) | [ai-memory-vault](https://github.com/jaredrhod/ai-memory-vault) |
+| Mouth (voice) | **Talk** tab: Gemini Live (your own key) with the agent's name, personality and memory, spoken greeting, push-to-talk, voice commands ("go hands free", "push to talk mode", "clear the session"), save the conversation to today's note | [backtalk](https://github.com/jaredrhod/backtalk) (Claude Code, local models) |
+| Face | four animated faces (Circuit board, Radial, Code rain, Neural core) that idle, listen, think and speak with the conversation; full screen | [ai-visualizer](https://github.com/jaredrhod/ai-visualizer) |
+| Hands (optional) | **Stack** tab opens the real [barehands](https://github.com/jaredrhod/barehands) board (webcam hand tracking) inside ulyOS when it runs locally, plus install commands | barehands |
+
+The Stack tab also checks whether his face (port 8790) and hands (port 8794) servers are running on `127.0.0.1` and shows the install commands for the whole stack. The CSP allows `http://127.0.0.1:*` and `http://localhost:*` for this, and nothing else over plain http.
+
+**Licences.** His projects are AGPL-3.0-or-later (the memory templates are CC BY-SA 4.0). ulyOS contains **none** of their code: the features above are original implementations of the same ideas, and the originals are only linked or embedded from your own computer. Credit and thanks to Jared Rhodenizer.
+
 ## Apps
 | App | Source |
 |---|---|
 | TrustVault | digital legacy platform, bundled in `apps/trustvault.html` but not a default icon |
 | QR Seal | password-protected QR generator and reader (from ulyweb/qrcode) |
 | System Vault | key and passphrase generator with entropy scoring (from ulyweb/key) |
-| Crypto Compass | beginner crypto guide and prices (from ulyweb/crypto) |
+| Crypto Compass | beginner crypto guide and prices (from ulyweb/crypto). Contains the author's referral links, each marked "referral" in the app |
+| Jarvis | AI assistant toolkit: memory vault, Gemini Live voice, animated faces, links to the original stack (see above) |
 | Polotno, GetArtCraft | embedded web apps |
 | YouTube, XRP Price (CoinMarketCap), Outlook | shortcuts that open in a browser tab, because those sites forbid embedding |
 | Your own URL shortcuts | right-click the desktop → New URL shortcut (sites that forbid embedding open in a browser tab) |

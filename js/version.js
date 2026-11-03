@@ -3,8 +3,13 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.19.0';
+ulyOS.version = '1.20.0';
 ulyOS.CHANGELOG = [
+  { v: '1.20.0', d: '2026-11-03', n: [
+    'Jarvis AI assistant toolkit (Apps folder), inspired by Jared Rhodenizer\'s open fullstack-agent: a memory vault of Markdown notes in encrypted Files (daily notes, links, backlinks, search, jobs), a voice conversation through Gemini Live with your agent\'s name, personality and memory, four animated faces that follow the conversation, push-to-talk and voice commands',
+    'Jarvis → Stack: install commands for the original stack, a check for his face and hands servers on this computer, and one-click windows for the real barehands (webcam hand tracking) and face when they are running. The security policy allows only 127.0.0.1 / localhost for this',
+    'Crypto Compass referral links are now disclosed in Settings → About and the README (the app already marked each link)',
+  ] },
   { v: '1.19.0', d: '2026-11-03', n: [
     'Wallpapers are now real photographs: 52 genuine photos in six themed sections (Cities & lights, Forests / mountains & coast, Aurora & night sky, Desert & canyon, Space, Earth from orbit). Each was checked on Wikimedia Commons as Public domain or CC0, so no attribution is needed, and each is fetched only when you open its section or pick it',
     'Settings → Appearance → "Find more wallpapers": quick links to Magnific (AI), Unsplash, Pexels and NASA. Download what you like and apply it with "Image from your computer"',

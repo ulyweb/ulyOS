@@ -67,7 +67,7 @@ Settings → Sync. Settings, desktop layout, widgets and app data are packed int
 ## Look and widgets
 - **Icons**: full-colour hand-drawn app icons (`js/icons-rich.js`); Settings → Desktop → “Full-colour app icons” turns them off for the flat styles.
 - **Profile pictures**: letter, emoji or photo. The picture is stored with the profile name (not inside the encrypted vault) because the sign-in screen shows it; photos are cropped to 192 px on your device.
-- **Wallpapers**: nature, **space** and **anime-style** scenes are generated vector art (`js/landscapes.js`, `js/scenes.js`) — resolution-independent, offline, original (MIT with the project). The **real photos** section lists Cassini / Hubble images that were checked on Wikimedia Commons as public domain or CC0; they are not in the repository and are fetched (resized) from commons.wikimedia.org only after you open the list and pick one. The offline build cannot show them.
+- **Wallpapers**: drawn nature scenes (`js/landscapes.js`, built in, work offline) plus 52 real photographs (`js/photos.js`) — cities, mist, mountains, coast, desert, aurora, space — fetched on demand from Wikimedia Commons, each verified as Public domain or CC0. Settings → Appearance also links to Magnific, Unsplash, Pexels and NASA for your own downloads (their licences apply to you, not to ulyOS).
 - **Widgets**: Clock, Calendar, Notes, System, Crypto, Scoreboard, Headlines, Prediction markets, Timer, plus **Weather** (Open-Meteo, no key; contacts `api.open-meteo.com` and `geocoding-api.open-meteo.com` only while that widget exists), **To-do** (private — not exported), **World clocks**, **Moon** and **Device**. Pin a widget to lock its position; right-click → Theme or Settings → Widgets → Widget theme to recolor.
 
 ## Tests

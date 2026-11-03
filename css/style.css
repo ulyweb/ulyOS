@@ -1169,3 +1169,6 @@ body.no-anim .ri-b { animation: none !important; }
 .cap-prev { max-height: 46vh; overflow: auto; border-radius: 10px; border: 1px solid var(--border-strong); background: repeating-conic-gradient(rgba(var(--ink-rgb), .06) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
 .cap-prev img { display: block; max-width: 100%; margin: 0 auto; }
 .cap-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 0; align-items: center; } .cap-eng { width: auto; }
+
+.wp-grp { margin: 14px 0 6px; font-size: 12px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.wp-det { margin: 6px 0; } .wp-det > summary { cursor: pointer; margin: 8px 0; list-style-position: inside; } .wp-det[open] > .wp-list { margin-top: 8px; }

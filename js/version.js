@@ -3,8 +3,13 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.18.0';
+ulyOS.version = '1.19.0';
 ulyOS.CHANGELOG = [
+  { v: '1.19.0', d: '2026-11-03', n: [
+    'Wallpapers are now real photographs: 52 genuine photos in six themed sections (Cities & lights, Forests / mountains & coast, Aurora & night sky, Desert & canyon, Space, Earth from orbit). Each was checked on Wikimedia Commons as Public domain or CC0, so no attribution is needed, and each is fetched only when you open its section or pick it',
+    'Settings → Appearance → "Find more wallpapers": quick links to Magnific (AI), Unsplash, Pexels and NASA. Download what you like and apply it with "Image from your computer"',
+    'The drawn space, anime-style and futuristic wallpapers were retired (a profile using one switches to Misty forest). The built-in nature scenes remain and work offline',
+  ] },
   { v: '1.18.0', d: '2026-11-03', n: [
     'Screenshot, like the Edge right-click menu: right-click the desktop → Screenshot (or press Ctrl+Shift+S, or File → Screenshot). Drag a region or capture the whole screen, then Save to Files (Pictures/Screenshots), Download, Copy, or Send to device through Beam',
     'Visual search: capture an area and search it with Google Lens, Bing Visual Search or TinEye (the picture is copied; press Ctrl+V on the search page). Nothing is shared unless you choose it',

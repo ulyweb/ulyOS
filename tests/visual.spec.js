@@ -28,26 +28,27 @@ test('full-colour app icons: desktop, folder, taskbar; can be switched off', asy
   expect(problems).toEqual([]);
 });
 
-test('space and anime-style wallpapers: grouped, selectable, valid vector images', async ({ page }) => {
+test('wallpapers: built-in nature scenes, grouped real photos with licences, links to find more', async ({ page }) => {
   const problems = watch(page);
   await createProfile(page, 'Walls');
-  const info = await page.evaluate(() => ulyOS.landscapes.groups.map(([t, l]) => [t, l.length]));
-  expect(info).toEqual([['Nature & landscapes', 12], ['Space', 8], ['Anime-style', 7], ['Futuristic', 8]]);
-  const check = await page.evaluate(() => ulyOS.landscapes.list.map(([id]) => { const u = ulyOS.landscapes.url(id); const svg = decodeURIComponent(u.replace('data:image/svg+xml,', '')); const d = new DOMParser().parseFromString(svg, 'image/svg+xml'); return [id, !d.querySelector('parsererror'), /<script|onload|xlink:href|href=/i.test(svg), Math.round(u.length / 1024)]; }));
-  for (const [id, ok, unsafe, kb] of check) { expect(ok, id + ' parses').toBe(true); expect(unsafe, id + ' has no scripts or links').toBe(false); expect(kb, id + ' size').toBeLessThan(200); }
+  expect(await page.evaluate(() => ulyOS.landscapes.groups.map(([t, l]) => [t, l.length]))).toEqual([['Nature & landscapes', 12]]);
+  const ph = await page.evaluate(() => ({ n: ulyOS.landscapes.photos.length, groups: ulyOS.landscapes.photoGroups.map(([t, l]) => t), keys: new Set(ulyOS.landscapes.photos.map((p) => p.key)).size, bad: ulyOS.landscapes.photos.filter((p) => !p.file || !p.credit || !/public domain|CC0/i.test(p.credit)).map((p) => p.key), removed: [ulyOS.landscapes.removed('land:anime-sakura'), ulyOS.landscapes.removed('land:space-mars'), ulyOS.landscapes.removed('land:fut-sky'), ulyOS.landscapes.removed('land:forest')] }));
+  expect(ph.n).toBeGreaterThanOrEqual(50);
+  expect(ph.keys).toBe(ph.n);                                   // unique keys
+  expect(ph.bad).toEqual([]);                                   // every photo names a file and a public-domain / CC0 credit
+  expect(ph.groups).toEqual(['Cities & lights', 'Forests, mountains & coast', 'Aurora & night sky', 'Desert & canyon', 'Space (NASA)', 'Earth from orbit']);
+  expect(ph.removed).toEqual([true, true, true, false]);        // retired drawn scenes migrate, real ones do not
   await page.evaluate(() => ulyOS.desktopApi.openSettings('appearance'));
-  await page.waitForSelector('.set-content h3:has-text("Space")');
-  await expect(page.locator('.set-content h3:has-text("Anime-style")')).toHaveCount(1);
-  await page.click('.wp-tile[title="Mars dusk"]');
-  expect(await page.evaluate(() => ulyOS.desktopApi.Settings.get('wallpaper'))).toBe('land:space-mars');
-  expect(await page.evaluate(() => document.getElementById('wallpaper').style.backgroundImage)).toContain('data:image/svg+xml');
-  await page.click('.wp-tile[title="Sakura twilight"]');
-  expect(await page.evaluate(() => ulyOS.desktopApi.Settings.get('wallpaper'))).toBe('land:anime-sakura');
-  // the desktop right-click menu lists the groups too
-  await page.evaluate(() => ulyOS.WM.all().forEach((w) => ulyOS.WM.close(w, { force: true })));
-  await page.mouse.click(800, 600, { button: 'right' });
-  await page.hover('.ctx-item:has-text("Wallpaper")');
-  await expect(page.locator('.ctx-item:has-text("Anime-style")')).toHaveCount(1);
+  await page.waitForSelector('.set-content h3:has-text("Real photos")');
+  const links = await page.evaluate(() => [...document.querySelectorAll('.set-row:has(.set-label) a.btn')].filter((a) => /Magnific|Unsplash|Pexels|NASA/.test(a.textContent)).map((a) => [a.textContent, a.target, a.rel]));
+  expect(links.length).toBe(4);
+  for (const [, t, r] of links) { expect(t).toBe('_blank'); expect(r).toContain('noopener'); }
+  await page.click('.set-content button:has-text("Show photos")');
+  await expect(page.locator('summary.wp-grp')).toHaveCount(6);
+  const thumbs = () => page.locator('.wp-det .wp-tile').count();
+  const first = await thumbs(); expect(first).toBeGreaterThan(0); expect(first).toBeLessThan(15);   // only the open section's thumbnails are requested
+  await page.click('summary.wp-grp:has-text("Space (NASA)")');
+  await expect.poll(thumbs).toBeGreaterThan(first);
   expect(problems).toEqual([]);
 });
 
@@ -206,6 +207,7 @@ test('photo wallpapers load only on request from Wikimedia Commons; unknown phot
   await page.waitForSelector('.set-content h3:has-text("Real photos")');
   expect(reqs).toEqual([]);                                   // nothing is fetched until you ask
   await page.click('.set-content button:has-text("Show photos")');
+  await page.click('summary.wp-grp:has-text("Space (NASA)")');
   await expect(page.locator('.wp-tile[title^="Pillars of Creation"]')).toHaveCount(1);
   await page.click('.wp-tile[title^="Pillars of Creation"]');
   expect(await page.evaluate(() => ulyOS.desktopApi.Settings.get('wallpaper'))).toBe('photo:pillars');

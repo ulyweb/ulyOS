@@ -1137,12 +1137,21 @@
     const photoBox = h('div', {});
     const paintPhotos = (open) => {
       const L = ulyOS.landscapes;
-      if (ulyOS.config.OFFLINE) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Photos are loaded from Wikimedia Commons, so they are not available in the offline build. The drawn space and anime-style scenes above work offline.' })); return; }
-      if (!open) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Genuine NASA photographs (Space Station, Artemis, Cassini, Juno, Hubble; public domain / CC0). They are not stored in ulyOS: when you open this list or pick one, your browser fetches a resized copy from commons.wikimedia.org.' }), h('button', { class: 'btn sm', text: 'Show photos…', onclick: () => paintPhotos(true) })); return; }
-      photoBox.replaceChildren(h('div', { class: 'wp-list' }, L.photos.map((p) => h('button', {
+      if (ulyOS.config.OFFLINE) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: 'Photos are loaded from Wikimedia Commons, so they are not available in the offline build. Use "Image from your computer" to add your own.' })); return; }
+      if (!open) { photoBox.replaceChildren(h('p', { class: 'set-desc', text: L.photos.length + ' real photographs: cities at night, misty forests, mountains, coast, desert, aurora, the Milky Way and NASA space imagery (public domain or CC0, so no attribution is needed). They are not stored in ulyOS: when you open this list or pick one, your browser fetches a resized copy from commons.wikimedia.org.' }), h('button', { class: 'btn sm', text: 'Show photos…', onclick: () => paintPhotos(true) })); return; }
+      const tile = (p) => h('button', {
         class: 'wp-tile' + (settings.wallpaper === 'photo:' + p.key ? ' active' : ''), title: p.label + ' — ' + p.credit,
         onclick: () => { eff = {}; Settings.set('wallpaper', 'photo:' + p.key); applyWallpaper(); paintPhotos(true); paintTiles(); ulyOS.audit("Wallpaper changed to photo '" + p.label + "' (" + p.credit + ')', 'info'); },
-      }, h('div', { class: 'wp-thumb', style: { backgroundImage: 'url("' + L.photoUrl(p.key, 320) + '")', backgroundSize: 'cover', backgroundPosition: 'center' } }), h('span', { text: p.label })))), h('p', { class: 'set-desc', text: 'Credits: NASA/JPL-Caltech/Cassini, NASA/ESA Hubble, and CC0 images on Wikimedia Commons.' }));
+      }, h('div', { class: 'wp-thumb', style: { backgroundImage: 'url("' + L.photoUrl(p.key, 320) + '")', backgroundSize: 'cover', backgroundPosition: 'center' } }), h('span', { text: p.label }));
+      // one collapsible section per theme; thumbnails are requested only when a section is opened (kind to Wikimedia)
+      const sections = L.photoGroups.map(([title, items], i) => {
+        const list = h('div', { class: 'wp-list' }), det = h('details', { class: 'wp-det' }, h('summary', { class: 'wp-grp', text: title + ' (' + items.length + ')' }), list);
+        const fill = () => { if (!list.childElementCount) list.replaceChildren(...items.map(tile)); };
+        det.addEventListener('toggle', () => { if (det.open) fill(); });
+        if (items.some((p) => settings.wallpaper === 'photo:' + p.key) || (i === 0 && !settings.wallpaper.startsWith('photo:'))) { det.open = true; fill(); }
+        return det;
+      });
+      photoBox.replaceChildren(...sections, h('p', { class: 'set-desc', text: 'Credits: NASA, NOAA, the US National Park Service, and CC0 photographers on Wikimedia Commons. Hover a photo for its source.' }));
     };
     paintPhotos(settings.wallpaper.startsWith('photo:'));
     const paintTiles = () => {
@@ -1252,6 +1261,7 @@
         landTiles,
         h('h3', { text: 'Real photos (NASA & public domain)' }),
         photoBox,
+        row('Find more wallpapers', 'Opens in a new tab. Download an image, then use “Image from your computer” below. Each site has its own licence: check it before sharing', h('div', { class: 'btn-row' }, ...[['Magnific (AI)', 'https://www.magnific.com/free-photos-vectors/ai-wallpaper'], ['Unsplash', 'https://unsplash.com/s/photos/wallpaper'], ['Pexels', 'https://www.pexels.com/search/wallpaper/'], ['NASA images', 'https://images.nasa.gov/']].map(([t, u]) => h('a', { class: 'btn sm', href: u, target: '_blank', rel: 'noopener noreferrer', text: t })))),
         row('Solid color', 'Pick any flat background color', colorIn),
         row('Image from your computer', 'Stored in the sandbox filesystem (Wallpapers/)', h('button', { class: 'btn sm', html: icon('upload', 14) + ' Choose image…', onclick: () => fileIn.click() })),
         row('Image from URL', null, h('div', { class: 'inline-form' }, urlIn, h('button', { class: 'btn sm', text: 'Apply', onclick: () => {
@@ -1360,6 +1370,10 @@
     if (!store.get('ulyos.migr.wpForest', false)) {   // one-time: the untouched default wallpaper becomes Misty forest
       if (settings.wallpaper === 'void') settings.wallpaper = 'land:forest';
       store.set('ulyos.settings', settings); store.set('ulyos.migr.wpForest', true);
+    }
+    if (!store.get('ulyos.migr.wp119', false)) {   // one-time: drawn space / anime / futuristic scenes were retired
+      if (ulyOS.landscapes && ulyOS.landscapes.removed(settings.wallpaper)) settings.wallpaper = 'land:forest';
+      store.set('ulyos.settings', settings); store.set('ulyos.migr.wp119', true);
     }
     if (!store.get('ulyos.migr.layout2s', false)) {   // one-time: classic taskbar, always visible, four pinned tools
       Object.assign(settings, { taskbarMode: 'bar', taskbarAutoHide: false, pinned: ['settings', 'beam', 'files', 'taskmgr'] });

@@ -3,8 +3,14 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.11.0';
+ulyOS.version = '1.12.0';
 ulyOS.CHANGELOG = [
+  { v: '1.12.0', d: '2026-11-03', n: [
+    'Dark / light theme: a sun / moon button next to the clock, and Settings → Appearance → Theme (Dark, Light, Auto follows your device). The profile screen remembers the last theme',
+    'App Store: about 45 apps (the built-in ones plus well-known web apps) in categories with search; Add puts a shortcut on the desktop, Try opens it without adding. Nothing is installed',
+    'Speak: Save text… (to Files, encrypted, and/or a download), Open… a text file, and audio saves now ask where to put the file. Recording automatically uses a local voice when the chosen one is a cloud voice that cannot be captured',
+    'Sync → Cloud drive or network folder: choose a folder kept in step by Google Drive, iCloud Drive, OneDrive, Dropbox, Box, Nextcloud or a mounted network share and ulyOS syncs an encrypted file there; also save / open the settings .json in that folder. A Share button sends files to iCloud Drive / Drive from phones',
+  ] },
   { v: '1.11.0', d: '2026-11-02', n: [
     'Guided tour: a welcome screen after sign-in (first time, or every time if you switch it on) and a 13-step spotlight tour of the desktop, dock, Files, widgets, Speak, settings, security, sync and offline use. Replay from Help, the ulyOS logo menu or Settings → About',
     'Widgets can be resized freely by dragging the bottom-right corner, and they repack themselves (shrinking if needed) whenever the window changes size, so they no longer overlap icons or each other; they return to your chosen spots when there is room again',

@@ -18,7 +18,7 @@
     wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
     cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '12', widgetsVisible: true,
-    cursorStyle: 'neon', cursorSize: 100, welcomeAlways: false, cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
+    cursorStyle: 'neon', cursorSize: 100, welcomeAlways: false, theme: 'dark', cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // Telemetry FX (Settings → Effects)
     fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, depth: 50, sfx: true, sfxVolume: 35,
     // memory hygiene (Settings → Security)
@@ -90,6 +90,20 @@
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
 
+  const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  const resolveTheme = () => (settings.theme === 'light' ? 'light' : settings.theme === 'auto' ? (darkQuery && !darkQuery.matches ? 'light' : 'dark') : 'dark');
+  function applyTheme() {
+    const signedIn = !!(ulyOS.security && ulyOS.security.profileId && ulyOS.security.profileId());
+    let t;
+    if (signedIn) { t = resolveTheme(); try { localStorage.setItem('ulyos.theme', t); } catch { /* ignore */ } }
+    else { try { t = localStorage.getItem('ulyos.theme') === 'light' ? 'light' : 'dark'; } catch { t = 'dark'; } }   // profile screen: last used theme
+    root.dataset.theme = t;
+    const b = document.getElementById('tray-theme');
+    if (b) { b.innerHTML = icon(t === 'light' ? 'moon' : 'sun', 16); b.title = t === 'light' ? 'Switch to dark theme' : 'Switch to light theme'; }
+    const meta = document.querySelector('meta[name=theme-color]'); if (meta) meta.content = t === 'light' ? '#dfe3ee' : '#000000';
+  }
+  darkQuery?.addEventListener?.('change', () => { if (settings.theme === 'auto') applyTheme(); });
+  document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('#tray-theme')) { Settings.set('theme', resolveTheme() === 'light' ? 'dark' : 'light'); } });
   function applySettings() {
     const s = settings;
     root.style.setProperty('--accent', s.accent);
@@ -102,6 +116,7 @@
     root.style.setProperty('--fw', String([300, 400, 500, 600, 700].includes(+s.fontWeight) ? +s.fontWeight : 400));
     root.style.setProperty('--fstyle', s.fontStyle === 'italic' ? 'italic' : 'normal');
     document.body.dataset.widgets = s.widgetStyle === 'glass' ? 'glass' : 'vivid';
+    applyTheme();
     document.body.classList.toggle('no-anim', !s.animations);
     document.body.classList.toggle('no-blur', s.blur === 0);
     root.style.setProperty('--fx-aurora', (s.fxAurora / 100).toFixed(2));
@@ -295,6 +310,7 @@
     taskmgr: { name: 'Task Manager', icon: 'activity', open: () => ulyOS.Telemetry.open() },
     settings: { name: 'Settings', icon: 'settings', open: () => SettingsApp.open() },
     speak: { name: 'Speak', icon: 'volume', open: () => ulyOS.Speech.open() },
+    store: { name: 'App Store', icon: 'store', open: () => ulyOS.Store.open() },
   };
   const DEFAULT_ICONS = [
     { id: 'files', kind: 'sys', sys: 'files', name: 'Files' },
@@ -309,6 +325,7 @@
     { id: 'taskmgr', kind: 'sys', sys: 'taskmgr', name: 'Task Manager' },
     { id: 'settings', kind: 'sys', sys: 'settings', name: 'Settings' },
     { id: 'speak', kind: 'sys', sys: 'speak', name: 'Speak' },
+    { id: 'store', kind: 'sys', sys: 'store', name: 'App Store' },
   ];
 
   /** Icon markup for an icon record (used by desktop tiles, taskbar, window chrome). */
@@ -628,6 +645,11 @@
       store.set('ulyos.migr.addSpeak', true);
       if (saved) saveIcons();
     }
+    if (!store.get('ulyos.migr.addStore', false)) {   // one-time: the App Store icon appears on existing desktops
+      if (!Desktop.icons.some((i) => i.id === 'store')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'store') });
+      store.set('ulyos.migr.addStore', true);
+      if (saved) saveIcons();
+    }
     if (!store.get('ulyos.migr.dropPhotopeaSpotify', false)) {   // one-time: these are no longer stock icons
       Desktop.icons = Desktop.icons.filter((i) => !['photopea', 'spotify'].includes(i.id));
       store.set('ulyos.migr.dropPhotopeaSpotify', true);
@@ -847,6 +869,7 @@
     const clampKey = (k, lo, hi) => { if (k in out) out[k] = clamp(out[k], lo, hi); };
     clampKey('fxAurora', 0, 100); clampKey('fxTilt', 0, 10); clampKey('fxGlow', 0, 100); clampKey('iconScale', 50, 160); clampKey('depth', 0, 100); clampKey('sfxVolume', 0, 100); clampKey('cursorSize', 50, 300); clampKey('clipClear', 0, 600); clampKey('purgeIdle', 0, 3600);
     clampKey('animSpeed', 0.25, 3); clampKey('blur', 0, 60); clampKey('glassAlpha', 0.3, 1); clampKey('taskbarSize', 36, 84);
+    if ('theme' in out && !['dark', 'light', 'auto'].includes(out.theme)) delete out.theme;
     clampKey('fontSize', 10, 22);
     if ('fontFamily' in out && !FONTS.some((f) => f[0] === out.fontFamily)) delete out.fontFamily;
     if ('fontWeight' in out && ![300, 400, 500, 600, 700].includes(out.fontWeight)) delete out.fontWeight;
@@ -892,7 +915,8 @@
     }
     return out;
   }
-  function exportSettings() {
+  /** The settings export as { blob, name } (also used by the Sync tab's folder connector and Share button). */
+  function settingsFile() {
     const prof = ulyOS.security.profile();
     const data = {
       format: 'ulyOS-settings', v: 1, exported: new Date().toISOString(), profile: prof ? prof.name : '',
@@ -901,7 +925,11 @@
       widgets: ulyOS.Widgets.exportList(),   // positions / sizes only — note text is private and never exported
     };
     if (String(settings.wallpaperCustom || '').startsWith('opfs:') && settings.wallpaper === 'custom') data.settings.wallpaper = 'void';
-    const a = h('a', { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })), download: 'ulyOS-settings-' + (prof ? prof.name.replace(/[^\w.-]+/g, '_') : 'profile') + '-' + ulyOS.util.stamp() + '.json' });
+    return { data, blob: new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), name: 'ulyOS-settings-' + (prof ? prof.name.replace(/[^\w.-]+/g, '_') : 'profile') + '-' + ulyOS.util.stamp() + '.json' };
+  }
+  function exportSettings() {
+    const { data, blob, name } = settingsFile();
+    const a = h('a', { href: URL.createObjectURL(blob), download: name });
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     ulyOS.audit('Settings exported (' + Object.keys(data.settings).length + ' options, ' + data.icons.length + ' desktop icons)', 'ok');
     ui.toast('Settings exported — import the file on another device to copy this setup', { type: 'ok', timeout: 4500 });
@@ -1096,6 +1124,8 @@
           ulyOS.audit('Wallpaper set from ' + hostName(u), 'info');
         } }))),
         h('h3', { text: 'Accent color' }), swatches,
+        h('h3', { text: 'Theme' }),
+        row('Dark / light', 'Also switchable with the sun / moon button next to the clock. “Auto” follows your device', choose('theme', [['dark', 'Dark'], ['light', 'Light'], ['auto', 'Auto (follow device)']])),
         h('h3', { text: 'Text' }),
         row('Font', 'Applies to the whole interface. These are fonts already on your device, so nothing is downloaded', choose('fontFamily', FONTS)),
         row('Text size', 'Scales every label, menu and window (13 is the default)', range('fontSize', 10, 22, 1, (v) => v + ' px')),
@@ -1205,6 +1235,7 @@
     applySettings();   // defaults — gives the profile screen the custom cursor + glass look
     Cursor.init();
     bus.on('session:start', startSession);
+    bus.on('session:start', () => applyTheme());
   }
   /** Shared with js/shell.js (taskbar, dock, menu bar, start menu). */
   function catalog() {
@@ -1219,7 +1250,7 @@
     });
     return out;
   }
-  ulyOS.desktopApi = { launch, catalog, LANDSCAPES: LANDS, iconGradient: gradientOf, exportSettings, newShortcut: () => shortcutDialog(null), iconHTML, lockNow, restart, surprise, openSettings: (t) => SettingsApp.open(t), WALLPAPERS, applyWallpaper, Settings, setWallpaper: (id) => { eff = {}; Settings.set('wallpaper', id); applyWallpaper(); }, SYS_APPS };
+  ulyOS.desktopApi = { settingsFile, importSettings: (f) => importSettings(f), addIcon: (rec) => addIcon(rec), hasIcon: (id) => Desktop.icons.some((i) => i.id === id), removeIcon: (id) => { Desktop.icons = Desktop.icons.filter((i) => i.id !== id); saveIcons(); Desktop.render(); }, hostName, launch, catalog, LANDSCAPES: LANDS, iconGradient: gradientOf, exportSettings, newShortcut: () => shortcutDialog(null), iconHTML, lockNow, restart, surprise, openSettings: (t) => SettingsApp.open(t), WALLPAPERS, applyWallpaper, Settings, setWallpaper: (id) => { eff = {}; Settings.set('wallpaper', id); applyWallpaper(); }, SYS_APPS };
   ulyOS.restart = restart;
   ulyOS.launch = launch;
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

@@ -69,6 +69,14 @@
     if (!S.canRecord) throw new Error('This browser cannot record the tab’s audio (use Chrome or Edge on a computer)');
     text = String(text || '').trim();
     if (!text) throw new Error('Type something to speak first');
+    // cloud voices (e.g. "Google UK English") are played by the browser outside the page and cannot be captured → use a local one
+    let recVoice = prefs().voice;
+    const chosen = voices.find((x) => x.voiceURI === recVoice);
+    if (!chosen || !chosen.localService) {
+      const lang = ((chosen && chosen.lang) || navigator.language || 'en').slice(0, 2).toLowerCase();
+      const local = voices.find((x) => x.localService && x.lang.toLowerCase().startsWith(lang)) || voices.find((x) => x.localService);
+      if (local) { recVoice = local.voiceURI; status('Using the local voice “' + local.name + '” for recording…'); }
+    }
     const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true, preferCurrentTab: true, selfBrowserSurface: 'include', systemAudio: 'exclude', surfaceSwitching: 'exclude' });
     const stopAll = () => stream.getTracks().forEach((t) => t.stop());
     try {
@@ -81,7 +89,7 @@
       status('Recording while speaking…');
       await new Promise((resolve) => {
         const guard = setTimeout(resolve, Math.min(15 * 60000, 8000 + text.length * 120));
-        S.speak(text, { onend: () => { clearTimeout(guard); resolve(); } });
+        S.speak(text, { voice: recVoice, onend: () => { clearTimeout(guard); resolve(); } });
       });
       await sleep(700); rec.stop(); await stopped; stopAll();
       status('Encoding…');
@@ -133,11 +141,36 @@
       if (!(await ui.confirm({ title: 'Record speech to a file', message: 'Your browser will ask what to share. Choose “This tab” and make sure “Share tab audio” is ticked, then ulyOS speaks the text and saves it as ' + fmtSel.value.toUpperCase() + '. Nothing leaves your device.', okText: 'Continue' }))) return;
       try {
         const blob = await S.record(text, fmtSel.value, (m) => { now.textContent = m; });
-        const a = h('a', { href: URL.createObjectURL(blob), download: 'speech-' + ulyOS.util.stamp() + '.' + fmtSel.value });
-        document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-        now.textContent = ''; ui.toast('Saved ' + fmtSel.value.toUpperCase() + ' (' + (blob.size / 1024).toFixed(0) + ' KB)', { type: 'ok' });
-        ulyOS.audit('Speech saved as ' + fmtSel.value.toUpperCase() + ' (' + blob.size + ' bytes)', 'ok');
+        now.textContent = '';
+        await saveFile(blob, 'speech-' + ulyOS.util.stamp() + '.' + fmtSel.value, fmtSel.value.toUpperCase() + ' audio');
       } catch (err) { now.textContent = ''; S.stop(); ui.toast(err.name === 'NotAllowedError' ? 'Recording was cancelled' : err.message, { type: 'err', timeout: 7000 }); }
+    };
+    /** Ask where to put a file: the encrypted Files sandbox (Documents/Speak) and/or a normal download. */
+    const saveFile = async (blob, defName, kind) => {
+      const v = await ui.form({ title: 'Save ' + kind, message: 'Choose a name and where to keep it.', okText: 'Save',
+        fields: [
+          { name: 'name', label: 'File name', value: defName },
+          { name: 'where', label: 'Save to', type: 'select', value: 'both', options: [
+            { value: 'both', label: 'Files (encrypted in ulyOS) and download a copy' }, { value: 'files', label: 'Files only — Documents/Speak (encrypted)' }, { value: 'download', label: 'Download only' }] },
+        ], validate: (x) => (/^[^\\/:*?"<>|]{1,80}$/.test((x.name || '').trim()) ? null : 'Use a simple file name (no / \\ : * ? " < > |)') });
+      if (!v) return false;
+      const name = v.name.trim();
+      if (v.where !== 'download') {
+        try { await ulyOS.FS.writeSandboxFile('Documents/Speak/' + name, blob); } catch (e) { ui.toast('Could not save to Files: ' + e.message, { type: 'err' }); if (v.where === 'files') return false; }
+      }
+      if (v.where !== 'files') { const a = h('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+      ui.toast('Saved ' + name + (v.where === 'download' ? '' : ' in Files → Documents → Speak'), { type: 'ok' });
+      ulyOS.audit("Speak: saved '" + name + "' (" + blob.size + ' bytes)', 'ok');
+      return true;
+    };
+    const saveText = async () => {
+      if (!ta.value.trim()) { ta.focus(); ui.toast('Nothing to save yet — type something first', { type: 'info' }); return; }
+      await saveFile(new Blob([ta.value], { type: 'text/plain' }), 'speak-' + ulyOS.util.stamp() + '.txt', 'text');
+    };
+    const openText = () => {
+      const inp = h('input', { type: 'file', accept: '.txt,.md,text/plain' });
+      inp.addEventListener('change', async () => { const f = inp.files[0]; if (!f) return; if (f.size > 1e6) { ui.toast('That file is too large (1 MB max)', { type: 'err' }); return; } ta.value = (await f.text()).slice(0, 20000); ta.focus(); });
+      inp.click();
     };
     const speakAll = () => {
       const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
@@ -159,7 +192,10 @@
         h('button', { class: 'btn', html: icon('pause', 14) + ' Pause', onclick: () => synth.pause() }),
         h('button', { class: 'btn', html: icon('play', 14) + ' Resume', onclick: () => synth.resume() }),
         h('button', { class: 'btn', html: icon('stop', 14) + ' Stop', onclick: S.stop }),
-        h('button', { class: 'btn', text: 'Clear', onclick: () => { ta.value = ''; ta.focus(); } })),
+        h('button', { class: 'btn', text: 'Clear', onclick: () => { ta.value = ''; ta.focus(); } }),
+        h('span', { class: 'grow' }),
+        h('button', { class: 'btn', html: icon('save', 14) + ' Save text…', onclick: saveText }),
+        h('button', { class: 'btn', html: icon('upload', 14) + ' Open…', onclick: openText })),
       h('div', { class: 'spk-row' }, h('label', {}, perWord, 'Speak each word as I type'), voiceSel),
       h('div', { class: 'spk-row spk-save' },
         h('b', { text: 'Save as audio' }), fmtSel,

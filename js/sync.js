@@ -121,6 +121,48 @@
     } else await gh('/gists/' + encodeURIComponent(cfg.gist), { method: 'PATCH', body: JSON.stringify({ files: { [FILE]: { content: text } } }) });
   }
 
+  /* ---------- shared-folder transport ----------
+     Pick any folder on this computer. If a sync client keeps that folder in step with the cloud (Google Drive for
+     desktop, iCloud Drive, OneDrive, Dropbox, Box Drive, Nextcloud / ownCloud client) or it is a mounted network
+     share (SMB / NAS), ulyOS reads and writes one encrypted file there and the service carries it between devices.
+     ulyOS itself never talks to those services, so no account details are involved. Chromium browsers only. */
+  const FOLDER_FILE = 'ulyos-sync.ulysync';
+  const idb = () => new Promise((res, rej) => { const r = indexedDB.open('ulyos-sync', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const idbGet = async (k) => { const d = await idb(); return new Promise((res) => { const q = d.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); };
+  const idbSet = async (k, v) => { const d = await idb(); return new Promise((res, rej) => { const t = d.transaction('kv', 'readwrite'); if (v == null) t.objectStore('kv').delete(k); else t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); };
+  const dirKey = () => 'dir:' + ulyOS.security.profileId();
+  Sync.folderSupported = !!window.showDirectoryPicker;
+  let memDir = null;   // the handle for this session (the stored copy is only read after a reload)
+  Sync.folderName = async () => cfg.folder || '';
+  Sync.pickFolder = async function () {
+    if (!window.showDirectoryPicker) throw new Error('Your browser cannot open folders (use Chrome or Edge on a computer)');
+    const handle = await window.showDirectoryPicker({ id: 'ulyos-sync', mode: 'readwrite' });
+    memDir = handle;
+    await idbSet(dirKey(), handle);
+    cfg.folder = handle.name; saveCfg();
+    ulyOS.audit("Sync folder '" + handle.name + "' chosen", 'ok');
+    return handle;
+  };
+  Sync.forgetFolder = async () => { memDir = null; await idbSet(dirKey(), null); delete cfg.folder; saveCfg(); };
+  async function folderHandle(interactive) {
+    const dirH = memDir || (memDir = await idbGet(dirKey()));
+    if (!dirH) throw new Error('Choose a sync folder first');
+    let perm = await dirH.queryPermission({ mode: 'readwrite' });
+    if (perm !== 'granted') { if (!interactive) throw new Error('needs-permission'); perm = await dirH.requestPermission({ mode: 'readwrite' }); }
+    if (perm !== 'granted') throw new Error('Permission to use the folder was not granted');
+    return dirH;
+  }
+  const folderTransport = (interactive) => ({
+    async read() { const d = await folderHandle(interactive); try { return await (await (await d.getFileHandle(FOLDER_FILE)).getFile()).text(); } catch (e) { if (e.name === 'NotFoundError') return null; throw e; } },
+    async write(text) { const d = await folderHandle(interactive); const w = await (await d.getFileHandle(FOLDER_FILE, { create: true })).createWritable(); await w.write(text); await w.close(); },
+    ready() { if (!cfg.folder) throw new Error('Choose a sync folder first'); },
+  });
+  const gistTransport = () => ({
+    async read() { return cfg.gist ? gistRead() : null; },
+    write: (text) => gistWrite(text),
+    ready() { if (!cfg.token) throw new Error('Add a GitHub token first (or use the file method)'); },
+  });
+
   /* ---------- operations ---------- */
   function need() {
     if (!cfg.pass) throw new Error('Set a sync passphrase first');
@@ -139,21 +181,22 @@
   }
 
   /** Pull from the gist, merge, push back. mode 'replace' = take the synced copy as is. */
-  Sync.syncNow = async function (mode) {
+  Sync.syncNow = async function (mode, via) {
     if (running) return null; running = true;
     try {
       need();
-      if (!cfg.token) throw new Error('Add a GitHub token first (or use the file method)');
+      const T = via === 'folder' ? folderTransport(true) : gistTransport();
+      T.ready();
       const local = snapshot();
       let remote = null, salt = null;
-      if (cfg.gist) { const txt = await gistRead(); if (txt) { const u = await unpack(txt, cfg.pass); remote = u.state; salt = u.salt; } }
+      { const txt = await T.read(); if (txt) { const u = await unpack(txt, cfg.pass); remote = u.state; salt = u.salt; } }
       let res;
       if (!remote) res = { merged: local, apply: [], remoteNeedsUpdate: true };
       else if (mode === 'replace') res = { merged: remote, apply: Object.entries(remote.items).filter(([k, i]) => local.items[k] ? local.items[k].v !== i.v : true).map(([k, i]) => ({ k, v: i.v, t: i.t })).concat(Object.keys(local.items).filter((k) => !remote.items[k]).map((k) => ({ k, v: null, t: Date.now() }))), remoteNeedsUpdate: false };
       else res = merge(local, remote);
-      if (res.remoteNeedsUpdate) await gistWrite(await pack({ ...res.merged, device: cfg.device }, cfg.pass, salt));
+      if (res.remoteNeedsUpdate) await T.write(await pack({ ...res.merged, device: cfg.device }, cfg.pass, salt));
       applyLocal(res.apply);
-      cfg.last = Date.now(); cfg.lastResult = res.apply.length + ' received' + (res.remoteNeedsUpdate ? ', sent' : ''); saveCfg();
+      cfg.last = Date.now(); cfg.lastResult = (via === 'folder' ? 'folder: ' : '') + res.apply.length + ' received' + (res.remoteNeedsUpdate ? ', sent' : ''); saveCfg();
       bus.emit('sync:done');
       ulyOS.audit('Sync complete (' + cfg.lastResult + ')', 'ok');
       afterApply(res.apply.length);
@@ -176,7 +219,7 @@
     afterApply(res.apply.length);
     return res.apply.length;
   };
-  Sync.config = () => ({ hasPass: !!cfg.pass, hasToken: !!cfg.token, gist: cfg.gist || '', auto: !!cfg.auto, last: cfg.last || 0, lastResult: cfg.lastResult || '', device: cfg.device });
+  Sync.config = () => ({ folder: cfg.folder || '', hasPass: !!cfg.pass, hasToken: !!cfg.token, gist: cfg.gist || '', auto: !!cfg.auto, last: cfg.last || 0, lastResult: cfg.lastResult || '', device: cfg.device });
   Sync.setPass = (p) => { const bad = C.policy(p, 'password'); if (bad) throw new Error(bad); cfg.pass = p; saveCfg(); };
   Sync.getPass = () => cfg.pass || '';
   Sync.setToken = (t, gist) => { cfg.token = (t || '').trim(); if (gist != null) cfg.gist = gist.trim(); saveCfg(); };
@@ -194,11 +237,18 @@
   bus.on('session:lock', () => { keyCache.clear(); });
 
   /* ---------- Settings → Sync ---------- */
+  const folderHandle0 = () => folderHandle(true);
   Sync.settingsSection = function ({ row }) {
     const wrap = h('div', {});
     const download = (blob, name) => { const a = h('a', { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); };
     const fmt = (t) => (t ? new Date(t).toLocaleString() : 'never');
     const fail = (e) => ui.toast(e.message, { type: 'err', timeout: 6000 });
+    const share = async (blob, name) => {
+      const file = new File([blob], name, { type: blob.type || 'application/json' });
+      if (!(navigator.canShare && navigator.canShare({ files: [file] }))) { fail(new Error('Sharing files is not supported here — use Export instead')); return; }
+      try { await navigator.share({ files: [file], title: name }); } catch (e) { if (e.name !== 'AbortError') fail(e); }
+    };
+    const canShare = !!(navigator.canShare && navigator.canShare({ files: [new File(['x'], 'x.json', { type: 'application/json' })] }));
     function paint() {
       const c = Sync.config();
       wrap.replaceChildren(
@@ -227,6 +277,7 @@
             c.hasPass ? h('button', { class: 'btn sm', text: 'Copy', onclick: async () => { try { await ulyOS.clip.copy(Sync.getPass()); ui.toast('Copied — paste it on your other device', { type: 'ok' }); } catch { fail(new Error('Could not copy')); } } }) : null)),
         h('h3', { text: '2 · Move a file yourself' }),
         row('Export sync file', 'An encrypted .ulysync file you can carry by AirDrop, cloud drive or USB', h('button', { class: 'btn sm', html: icon('download', 14) + ' Export', disabled: !c.hasPass, onclick: async () => { try { download(await Sync.exportFile(), (ulyOS.security.profile().name.replace(/[^\w.-]+/g, '_')) + '-' + stamp() + '.ulysync'); ui.toast('Sync file saved', { type: 'ok' }); } catch (e) { fail(e); } } })),
+        canShare ? row('Share sync file', 'Opens the share sheet — on iPhone / iPad choose “Save to Files” → iCloud Drive; on Android pick Drive or any app', h('button', { class: 'btn sm', text: 'Share…', disabled: !c.hasPass, onclick: async () => { try { await share(await Sync.exportFile(), 'ulyOS-' + stamp() + '.ulysync'); } catch (e) { fail(e); } } })) : null,
         row('Import sync file', 'Merges a file from another device: the newest change to each item wins', h('button', { class: 'btn sm', text: 'Import…', disabled: !c.hasPass, onclick: () => {
           const inp = h('input', { type: 'file', accept: '.ulysync,application/json' });
           inp.addEventListener('change', async () => { if (!inp.files[0]) return; try { const n = await Sync.importFile(await inp.files[0].text()); ui.toast(n ? n + ' change(s) merged' : 'Already up to date', { type: 'ok' }); paint(); } catch (e) { fail(e); } });
@@ -251,6 +302,27 @@
             paint();
           } })),
         c.hasToken ? row('Sync automatically', 'On sign-in and every 10 minutes while you are signed in', h('label', { class: 'switch' }, h('input', { type: 'checkbox', checked: c.auto, onchange: (e) => Sync.setAuto(e.target.checked) }), h('i'))) : null,
+        h('h3', { text: '4 · Cloud drive or network folder' }),
+        h('details', { class: 'howto' }, h('summary', { text: 'How to use Google Drive, iCloud, OneDrive, Dropbox, Box, Nextcloud or a network share' }),
+          h('p', { html: 'ulyOS never logs in to those services. Instead you point it at a <b>folder on this computer</b> and the service you already use keeps that folder in step with the cloud:' }),
+          h('ul', {}, [
+            h('li', { html: '<b>Google Drive, OneDrive, Dropbox, Box, iCloud Drive:</b> install the service’s desktop app (Drive for desktop, OneDrive, Dropbox, Box Drive, iCloud for Windows / built into macOS) and choose a folder inside it.' }),
+            h('li', { html: '<b>Nextcloud / ownCloud:</b> use its desktop sync client and choose a folder inside the sync folder.' }),
+            h('li', { html: '<b>Network drive (Samba / SMB, NAS):</b> mount the share in Finder / Explorer first, then choose a folder on it.' }),
+          ]),
+          h('p', { html: 'Then: set your sync passphrase, <b>Choose folder…</b>, press <b>Sync now</b>. On your other computer pick the same shared folder and the same passphrase. The folder only ever holds an encrypted <code>ulyos-sync.ulysync</code> file and, if you save it, <code>ulyOS-settings.json</code>. Needs Chrome or Edge on a computer; on phones use the Share button above.' })),
+        Sync.folderSupported
+          ? (c.folder
+            ? row('Folder: ' + c.folder, 'Merge with the encrypted file in this folder, or move your settings file in and out', h('div', { class: 'btn-row' },
+              h('button', { class: 'btn sm primary', html: icon('refresh', 14) + ' Sync now', disabled: !c.hasPass, onclick: async (e) => { e.target.disabled = true; try { await Sync.syncNow(undefined, 'folder'); ui.toast('Folder sync complete', { type: 'ok' }); } catch (x) { fail(x); } paint(); } }),
+              h('button', { class: 'btn sm', text: 'Save settings file here', onclick: async () => {
+                try { const d = await folderHandle0(); const { blob } = ulyOS.desktopApi.settingsFile(); const w = await (await d.getFileHandle('ulyOS-settings.json', { create: true })).createWritable(); await w.write(blob); await w.close(); ui.toast('Saved ulyOS-settings.json in ' + c.folder, { type: 'ok' }); ulyOS.audit('Settings file written to sync folder', 'ok'); } catch (x) { fail(x); } } }),
+              h('button', { class: 'btn sm', text: 'Open settings file…', onclick: async () => {
+                try { const d = await folderHandle0(); const [fh] = await window.showOpenFilePicker({ startIn: d, types: [{ description: 'ulyOS settings (.json)', accept: { 'application/json': ['.json'] } }] }); await ulyOS.desktopApi.importSettings(await fh.getFile()); } catch (x) { if (x.name !== 'AbortError') fail(x); } } }),
+              h('button', { class: 'btn sm', text: 'Change…', onclick: async () => { try { await Sync.pickFolder(); paint(); } catch (x) { if (x.name !== 'AbortError') fail(x); } } }),
+              h('button', { class: 'btn sm', text: 'Disconnect', onclick: async () => { await Sync.forgetFolder(); paint(); } })))
+            : row('Choose a folder', null, h('button', { class: 'btn sm primary', text: 'Choose folder…', onclick: async () => { try { await Sync.pickFolder(); paint(); } catch (x) { if (x.name !== 'AbortError') fail(x); } } })))
+          : row('Not available in this browser', 'Folder access needs Chrome or Edge on a computer. Use Export / Import or Share above.', null),
         h('p', { class: 'set-desc', style: { marginTop: '14px' }, text: 'If two devices change the same item at nearly the same moment, the later change wins and the other is overwritten. When changes arrive from another device, ulyOS asks to reload and you sign in again.' }));
     }
     bus.on('sync:done', () => { if (wrap.isConnected) paint(); });

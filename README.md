@@ -33,6 +33,11 @@ Settings → Sync. Settings, desktop layout, widgets and app data are packed int
 - **Speak** reads text aloud (optionally each word as you type) and can save speech as `.wav` or `.mp3`: browsers do not expose the audio of their built-in voices, so ulyOS records the tab's audio (choose “This tab” and “Share tab audio” in the browser prompt) and encodes it locally. Some cloud voices play outside the page and cannot be captured — pick a “local” voice. MP3 uses the LGPL `lamejs` encoder in `vendor/`.
 - **Offline build**: run the start script (`server.py` serves only this computer). Stop it with profile menu → **Quit ulyOS (stop server)**, Settings → System → Quit, or just close the tab (the server exits within a minute). A web page cannot close the browser itself.
 
+## Theme, App Store and cloud folders
+- **Dark / light theme**: the sun / moon button beside the clock, or Settings → Appearance → Theme (Auto follows your device). Bundled apps keep their own colors.
+- **App Store**: a curated catalog of the built-in apps and well-known web apps. “Add” creates a desktop shortcut (a link — nothing is installed); the catalog lives in `js/store.js`, add your own entries there.
+- **Cloud drives and network folders** (Settings → Sync → section 4): ulyOS never logs in to Google Drive, iCloud, OneDrive, Box, Dropbox or Nextcloud. You choose a folder on your computer that their desktop app keeps in sync (or a mounted SMB / NAS share), and ulyOS reads and writes an encrypted `ulyos-sync.ulysync` and, on request, `ulyOS-settings.json` there. Needs Chrome or Edge on a computer; on phones use **Share…** (iCloud Drive / Drive via the share sheet). Direct API connectors (OAuth) are deliberately not included: they would need your own registered client IDs and a wider network policy.
+
 ## Tests
 ```bash
 npm ci

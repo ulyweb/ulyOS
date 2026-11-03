@@ -99,5 +99,6 @@ test('Settings explain storage, passkeys and sync', async ({ page }) => {
   await page.evaluate(() => ulyOS.desktopApi.openSettings('security'));
   await expect(page.locator('.set-content details.howto')).toContainText('How passkeys and fingerprint unlock work');
   await page.evaluate(() => ulyOS.desktopApi.openSettings('sync'));
-  await expect(page.locator('.set-content details.howto')).toContainText('Personal access tokens');
+  await expect(page.locator('.set-content details.howto').first()).toContainText('Personal access tokens');
+  await expect(page.locator('.set-content details.howto').nth(1)).toContainText('Google Drive');
 });

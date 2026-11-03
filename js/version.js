@@ -3,8 +3,15 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.16.0';
+ulyOS.version = '1.17.0';
 ulyOS.CHANGELOG = [
+  { v: '1.17.0', d: '2026-11-03', n: [
+    'Menu bar clock is fully customisable (Settings → Dock & Menu bar → Date & time): Digital, Analog, LCD or time-only style; 12 / 24-hour; seconds; AM/PM; five date formats; side-by-side or stacked layout; font, weight, size and colour',
+    'Desktop icons are alive again: full-colour icons gently float, each with its own motion (pulsing, flying, swaying, spinning) that speeds up on hover; switched off by "reduce animations"',
+    'New default wallpaper: Misty forest (profiles still on the old plain default switch automatically; any wallpaper you chose is kept)',
+    '8 futuristic wallpapers drawn as vector art: Sky city, Neon horizon, Orbital station, Mars colony, Ocean arcology, Bioluminescent grove, Hyperspace jump and Hover highway',
+    'The create-profile and sign-in screens no longer cut off the top on shorter windows; they scroll, and the emoji picker is compact',
+  ] },
   { v: '1.16.0', d: '2026-11-03', n: [
     'Full-colour app icons: hand-drawn, layered, multi-colour icons (squircle tiles with gloss and depth, like a modern desktop system) for Gemini Live, Speak, Beam, App Store, the Apps folder and every stock app — on the desktop, in the folder, taskbar and Start menu. Switch off in Settings → Desktop',
     'A redesigned welcome screen: gradient hero with floating app icons, three benefit cards, key facts and clear actions',

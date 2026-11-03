@@ -1119,3 +1119,38 @@ body[data-rich="1"] .sm-ico:has(.rich-ico) { background: transparent; } body[dat
 .av-err { color: var(--err); font-size: calc(12px * var(--fscale, 1)); text-align: center; } .av-err:empty { display: none; }
 
 .wgt-todo { --w1: #22c55e; --w2: #06b6d4; } .wgt-world { --w1: #38bdf8; --w2: #818cf8; } .wgt-moon { --w1: #fcd34d; --w2: #6366f1; } .wgt-device { --w1: #64748b; --w2: #22d3ee; } .wgt-weather { --w1: #38bdf8; --w2: #fbbf24; }
+
+/* Gentle life for the full-colour desktop icons (bob + per-icon motion; respects reduced-motion / no-anim) */
+body[data-rich="1"] .desk-icon .di-tile.has-rich { animation: tile-bob 5.5s ease-in-out infinite; animation-delay: var(--bd, 0s); }
+body[data-rich="1"] .desk-icon.launching .di-tile.has-rich { animation: tile-launch .6s cubic-bezier(.3, 0, .4, 1) 2 !important; }
+.ri-b { transform-box: fill-box; transform-origin: center; }
+.desk-icon svg[data-ri=live] .ri-b { animation: ri-pulse 2.6s ease-in-out infinite; }
+.desk-icon svg[data-ri=speak] .ri-b { animation: ri-pulse 3.2s ease-in-out infinite; }
+.desk-icon svg[data-ri=beam] .ri-b { animation: ri-fly 3.4s ease-in-out infinite; }
+.desk-icon svg[data-ri=store] .ri-b { animation: ri-sway 4.2s ease-in-out infinite; }
+.desk-icon svg[data-ri=apps] .ri-b { animation: ri-pulse 4.4s ease-in-out infinite; }
+.desk-icon svg[data-ri=settings] .ri-b { animation: ri-spin 18s linear infinite; }
+.desk-icon svg[data-ri=cryptocompass] .ri-b { animation: ri-sway 5s ease-in-out infinite; }
+.desk-icon svg[data-ri=taskmgr] .ri-b, .desk-icon svg[data-ri=xrp] .ri-b { animation: ri-pulse 3s ease-in-out infinite; }
+.desk-icon:hover svg[data-ri] .ri-b { animation-duration: .9s; }
+@keyframes ri-pulse { 50% { scale: 1.07; } }
+@keyframes ri-fly { 50% { translate: 2px -2.5px; rotate: 4deg; } }
+@keyframes ri-sway { 50% { rotate: 5deg; } }
+@keyframes ri-spin { to { rotate: 360deg; } }
+body.no-anim .ri-b { animation: none !important; }
+
+/* Clock customisation (Settings → Dock & Menu Bar → Date & time) */
+.tray-clock b, #menubar .tray-clock b { font-family: var(--clock-font, var(--font)); font-size: var(--clock-size, 13px); font-weight: var(--clock-fw, 500); }
+.tray-clock span, #menubar .tray-clock span { font-family: var(--clock-font, var(--font)); font-size: calc(var(--clock-size, 13px) * .88); }
+.tray-clock[data-color=accent] b, .tray-clock[data-color=accent] svg { color: var(--accent); }
+#menubar .tray-clock { height: auto; min-height: 22px; }
+#menubar .tray-clock[data-layout=stack] { flex-direction: column; align-items: flex-end; gap: 0; line-height: 1.05; }
+#menubar .tray-clock[data-layout=stack] b { order: 2; } #menubar .tray-clock[data-layout=stack] span { order: 1; font-size: calc(var(--clock-size, 13px) * .66); opacity: .8; }
+.tray-clock[data-style=lcd] b { font-family: var(--mono); letter-spacing: .08em; color: var(--accent); text-shadow: 0 0 8px rgba(var(--accent-rgb), .75); background: rgba(0, 0, 0, .35); padding: 0 6px; border-radius: 5px; }
+.tray-clock .aclock { width: calc(var(--clock-size, 13px) * 1.7); height: calc(var(--clock-size, 13px) * 1.7); flex: none; order: 2; }
+
+/* Sign-in / create-profile: never clip the top on short screens — scroll instead, centre only when it fits */
+#auth { justify-content: flex-start; }
+#auth > :first-child { margin-top: auto; } #auth > :last-child { margin-bottom: auto; }
+.av-emoji { max-height: 118px; overflow-y: auto; padding-right: 2px; }
+@media (max-height: 900px) { .auth-sub { margin-bottom: 12px; } }

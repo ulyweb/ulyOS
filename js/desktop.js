@@ -15,9 +15,9 @@
      Settings store
      ========================================================================== */
   const DEFAULT_SETTINGS = {
-    wallpaper: 'void', wallpaperColor: '#07080c', wallpaperCustom: '',
+    wallpaper: 'land:forest', wallpaperColor: '#07080c', wallpaperCustom: '',
     accent: '#8fa3ff', animations: true, animSpeed: 1, blur: 24, glassAlpha: 0.72,
-    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '12', widgetsVisible: true,
+    cursor: true, bootAnim: true, iconSize: 'medium', favicons: true, clockSeconds: true, clockFormat: '12', widgetsVisible: true, clockStyle: 'digital', clockDate: 'short', clockFont: 'inherit', clockSize: 13, clockWeight: 500, clockColor: 'text', clockLayout: 'row', clockAmPm: true,
     cursorStyle: 'neon', cursorSize: 100, welcomeAlways: false, theme: 'dark', richIcons: true, widgetTheme: 'auto', cursorColor: '', fontFamily: 'system', fontSize: 13, fontWeight: 400, fontStyle: 'normal', widgetStyle: 'vivid', animStyle: 'scale', iconStyle: 'vivid', shuffleOnLogin: false,
     // Telemetry FX (Settings → Effects)
     fxAurora: 65, fxTilt: 0, fxAnim: true, fxGlow: 55, iconScale: 100, fxScan: false, depth: 50, sfx: true, sfxVolume: 35,
@@ -112,6 +112,9 @@
     root.style.setProperty('--glass-alpha', s.glassAlpha);
     root.style.setProperty('--speed', s.animSpeed);
     root.style.setProperty('--font', FONT_STACKS[s.fontFamily] || FONT_STACKS.system);
+    root.style.setProperty('--clock-font', s.clockFont && s.clockFont !== 'inherit' && FONT_STACKS[s.clockFont] ? FONT_STACKS[s.clockFont] : 'var(--font)');
+    root.style.setProperty('--clock-size', clamp(+s.clockSize || 13, 10, 26) + 'px');
+    root.style.setProperty('--clock-fw', String([400, 500, 700].includes(+s.clockWeight) ? +s.clockWeight : 500));
     root.style.setProperty('--fscale', (clamp(+s.fontSize || 13, 10, 22) / 13).toFixed(5));
     root.style.setProperty('--fw', String([300, 400, 500, 600, 700].includes(+s.fontWeight) ? +s.fontWeight : 400));
     root.style.setProperty('--fstyle', s.fontStyle === 'italic' ? 'italic' : 'normal');
@@ -986,6 +989,13 @@
     if ('taskbarMode' in out && !oneOf(out.taskbarMode, ['bar', 'dock'])) delete out.taskbarMode;
     if ('taskbarPos' in out && !oneOf(out.taskbarPos, ['bottom', 'top', 'left', 'right'])) delete out.taskbarPos;
     if ('clockFormat' in out && !oneOf(out.clockFormat, ['12', '24'])) delete out.clockFormat;
+    if ('clockStyle' in out && !oneOf(out.clockStyle, ['digital', 'analog', 'lcd', 'minimal'])) delete out.clockStyle;
+    if ('clockDate' in out && !oneOf(out.clockDate, ['short', 'long', 'numeric', 'iso', 'none'])) delete out.clockDate;
+    if ('clockFont' in out && out.clockFont !== 'inherit' && !FONTS.some((f) => f[0] === out.clockFont)) delete out.clockFont;
+    if ('clockLayout' in out && !oneOf(out.clockLayout, ['row', 'stack'])) delete out.clockLayout;
+    if ('clockColor' in out && !oneOf(out.clockColor, ['text', 'accent'])) delete out.clockColor;
+    if ('clockWeight' in out && ![400, 500, 700].includes(+out.clockWeight)) delete out.clockWeight;
+    if ('clockSize' in out) { const n = +out.clockSize; if (!(n >= 10 && n <= 26)) delete out.clockSize; }
     if ('menubarStyle' in out && !oneOf(out.menubarStyle, ['glass', 'solid'])) delete out.menubarStyle;
     // a custom wallpaper only travels if it is a plain web URL (uploaded images live in this browser's sandbox)
     const wpc = normalizeUrl(out.wallpaperCustom || '');
@@ -1270,9 +1280,7 @@
         row('Fetch website favicons', 'Custom shortcuts request a favicon from Google’s favicon service', sw('favicons', () => Desktop.render())),
         row('Auto-arrange', 'Pack icons into the grid from the top-left', h('button', { class: 'btn sm', text: 'Arrange now', onclick: autoArrange })),
         row('Restore stock icons', 'Bring back deleted default icons', h('button', { class: 'btn sm', text: 'Restore', onclick: () => { missingDefaults().length ? restoreDefaults() : ui.toast('All stock icons are already on the desktop'); } })),
-        h('h3', { text: 'Clock' }),
-        row('Show seconds in clock', null, sw('clockSeconds')),
-        row('Time format', 'Applies to the taskbar / menu bar clock and the Clock widget', choose('clockFormat', [['24', '24-hour (military)'], ['12', '12-hour (AM/PM)']]))),
+        h('div', { class: 'set-desc', text: 'Clock, date and time format: Settings → Dock & Menu Bar → Date & time.' })),
       widgets: ulyOS.Widgets.settingsSection({ row, sw, choose }),
       shell: ulyOS.Shell.settingsSection({ row, sw, range, choose }),
       security: securitySection(),
@@ -1346,6 +1354,10 @@
     if (!store.get('ulyos.migr.defaults4', false)) {   // one-time: 12-hour clock + neon cursor
       Object.assign(settings, { clockFormat: '12', cursorStyle: 'neon' });
       store.set('ulyos.settings', settings); store.set('ulyos.migr.defaults4', true);
+    }
+    if (!store.get('ulyos.migr.wpForest', false)) {   // one-time: the untouched default wallpaper becomes Misty forest
+      if (settings.wallpaper === 'void') settings.wallpaper = 'land:forest';
+      store.set('ulyos.settings', settings); store.set('ulyos.migr.wpForest', true);
     }
     if (!store.get('ulyos.migr.layout2s', false)) {   // one-time: classic taskbar, always visible, four pinned tools
       Object.assign(settings, { taskbarMode: 'bar', taskbarAutoHide: false, pinned: ['settings', 'beam', 'files', 'taskmgr'] });

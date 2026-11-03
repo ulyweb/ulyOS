@@ -94,12 +94,32 @@
   /* ------------------------------------------------------------------------
      Tray: RAM chip, profile chip, clock
      ------------------------------------------------------------------------ */
+  const DATE_FMT = {
+    short: { weekday: 'short', day: 'numeric', month: 'short' },
+    long: { weekday: 'long', day: 'numeric', month: 'long' },
+    numeric: { day: 'numeric', month: 'numeric', year: '2-digit' },
+  };
+  function analogFace(d, secs) {
+    const a = (deg, len, w, c) => '<line x1="12" y1="12" x2="' + (12 + len * Math.sin(deg * Math.PI / 180)).toFixed(2) + '" y2="' + (12 - len * Math.cos(deg * Math.PI / 180)).toFixed(2) + '" stroke="' + c + '" stroke-width="' + w + '" stroke-linecap="round"/>';
+    const s = d.getSeconds(), m = d.getMinutes() + s / 60, hr = (d.getHours() % 12) + m / 60;
+    return '<svg class="aclock" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="rgba(var(--ink-rgb),.08)" stroke="currentColor" stroke-width="1.4"/>' +
+      '<path d="M12 3v1.6M21 12h-1.6M12 21v-1.6M3 12h1.6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".7"/>' +
+      a(hr * 30, 5.5, 1.8, 'currentColor') + a(m * 6, 8, 1.4, 'currentColor') + (secs ? a(s * 6, 9, .8, 'var(--accent)') : '') + '<circle cx="12" cy="12" r="1.2" fill="var(--accent)"/></svg>';
+  }
   Shell.tickClock = function () {
     const clock = $('#tray-clock');
     if (!clock) return;
     const d = new Date();
-    clock.innerHTML = '<b>' + fmtClock(d, { seconds: !!get('clockSeconds'), h24: get('clockFormat') !== '12' }) +
-      '</b><span>' + d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) + '</span>';
+    const style = get('clockStyle') || 'digital', dm = get('clockDate') || 'short';
+    const h24 = get('clockFormat') !== '12', secs = !!get('clockSeconds');
+    let time = fmtClock(d, { seconds: secs, h24 });
+    if (!h24 && get('clockAmPm') === false) time = time.replace(/ (AM|PM)$/, '');
+    const date = dm === 'none' || style === 'minimal' ? '' : dm === 'iso' ? d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) : d.toLocaleDateString([], DATE_FMT[dm] || DATE_FMT.short);
+    clock.dataset.style = style;
+    clock.dataset.layout = get('clockLayout') === 'stack' ? 'stack' : 'row';
+    clock.dataset.color = get('clockColor') === 'accent' ? 'accent' : 'text';
+    clock.innerHTML = (style === 'analog' ? analogFace(d, secs) : '<b>' + time + '</b>') + (date ? '<span>' + date + '</span>' : '');
+    clock.title = d.toLocaleString([], { dateStyle: 'full', timeStyle: 'medium' });
   };
 
   /** Open a menu next to an element, above or below depending on where it sits on screen. */
@@ -483,6 +503,18 @@
       H.row('Show window titles', 'Text next to taskbar icons (top / bottom taskbar only)', H.sw('taskbarLabels')),
       H.row('Show RAM meter', null, H.sw('showRam')),
       H.row('Show clock', null, H.sw('showClock')),
+      h('h3', { text: 'Date & time' }),
+      H.row('Clock style', 'How the time looks in the menu bar / taskbar', segL('clockStyle', [['digital', 'Digital'], ['analog', 'Analog'], ['lcd', 'LCD'], ['minimal', 'Time only']])),
+      H.row('Time mode', '12-hour or 24-hour. Also used by the Clock widget', segL('clockFormat', [['12', '12-hour'], ['24', '24-hour']])),
+      H.row('Show seconds', null, H.sw('clockSeconds')),
+      H.row('Show AM / PM', '12-hour mode only', H.sw('clockAmPm')),
+      H.row('Date format', null, segL('clockDate', [['short', 'Tue, Nov 3'], ['long', 'Tuesday, November 3'], ['numeric', '11/3/26'], ['iso', '2026-11-03'], ['none', 'Hidden']])),
+      H.row('Layout', 'Date beside the time, or stacked above it', segL('clockLayout', [['row', 'Side by side'], ['stack', 'Stacked']])),
+      H.row('Font', null, segL('clockFont', [['inherit', 'Interface'], ['mono', 'Mono'], ['serif', 'Serif'], ['rounded', 'Rounded'], ['condensed', 'Condensed'], ['slab', 'Slab']])),
+      H.row('Weight', null, segL('clockWeight', [[400, 'Normal'], [500, 'Medium'], [700, 'Bold']])),
+      H.row('Size', 'Text size of the clock', H.range('clockSize', 10, 26, 1, (v) => v + 'px')),
+      H.row('Colour', null, segL('clockColor', [['text', 'Normal'], ['accent', 'Accent']])),
+      h('div', { class: 'set-tools' }, h('button', { class: 'btn', text: 'Reset clock', onclick: () => { S.patch({ clockStyle: 'digital', clockDate: 'short', clockFont: 'inherit', clockSize: 13, clockWeight: 500, clockColor: 'text', clockLayout: 'row', clockAmPm: true, clockSeconds: true, clockFormat: '12' }); Shell.tickClock(); } })),
       h('h3', { text: 'Pinned apps' }),
       h('div', { class: 'set-desc', text: 'Pinned apps stay in the taskbar / dock with a running indicator. Right-click any app, desktop icon or start-menu entry to pin or unpin it.' }),
       pins,

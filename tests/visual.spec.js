@@ -32,7 +32,7 @@ test('space and anime-style wallpapers: grouped, selectable, valid vector images
   const problems = watch(page);
   await createProfile(page, 'Walls');
   const info = await page.evaluate(() => ulyOS.landscapes.groups.map(([t, l]) => [t, l.length]));
-  expect(info).toEqual([['Nature & landscapes', 12], ['Space', 8], ['Anime-style', 7]]);
+  expect(info).toEqual([['Nature & landscapes', 12], ['Space', 8], ['Anime-style', 7], ['Futuristic', 8]]);
   const check = await page.evaluate(() => ulyOS.landscapes.list.map(([id]) => { const u = ulyOS.landscapes.url(id); const svg = decodeURIComponent(u.replace('data:image/svg+xml,', '')); const d = new DOMParser().parseFromString(svg, 'image/svg+xml'); return [id, !d.querySelector('parsererror'), /<script|onload|xlink:href|href=/i.test(svg), Math.round(u.length / 1024)]; }));
   for (const [id, ok, unsafe, kb] of check) { expect(ok, id + ' parses').toBe(true); expect(unsafe, id + ' has no scripts or links').toBe(false); expect(kb, id + ' size').toBeLessThan(200); }
   await page.evaluate(() => ulyOS.desktopApi.openSettings('appearance'));
@@ -215,4 +215,36 @@ test('photo wallpapers load only on request from Wikimedia Commons; unknown phot
   // imports cannot select a photo that is not in the list
   const kept = await page.evaluate(async () => { const f = new File([JSON.stringify({ format: 'ulyOS-settings', settings: { wallpaper: 'photo:../../evil' } })], 's.json'); const p = ulyOS.desktopApi.importSettings(f); await new Promise((r) => setTimeout(r, 400)); document.querySelector('.modal button:last-child').click(); await p; return ulyOS.desktopApi.Settings.get('wallpaper'); });
   expect(kept).toBe('photo:pillars');
+});
+
+test('defaults: Misty forest wallpaper; clock is customisable; icons animate; sign-in never clips', async ({ page }) => {
+  const problems = watch(page);
+  await createProfile(page, 'Clocky');
+  expect(await page.evaluate(() => ulyOS.desktopApi.Settings.get('wallpaper'))).toBe('land:forest');
+  // desktop icons have life: bob on the tile and motion inside the artwork
+  const anim = await page.evaluate(() => { const t = document.querySelector('.desk-icon .di-tile.has-rich'); const b = document.querySelector('.desk-icon svg[data-ri=beam] .ri-b'); return [getComputedStyle(t).animationName, getComputedStyle(b).animationName]; });
+  expect(anim).toEqual(['tile-bob', 'ri-fly']);
+  // clock: 24-hour, no date, analog, stacked
+  const S = (k, v) => page.evaluate(([a, b]) => { ulyOS.desktopApi.Settings.set(a, b); ulyOS.Shell.tickClock(); }, [k, v]);
+  await S('clockFormat', '24'); await S('clockSeconds', false); await S('clockDate', 'iso');
+  const txt = await page.locator('#tray-clock').innerText();
+  expect(txt).toMatch(/\d{2}:\d{2}\s+\d{4}-\d{2}-\d{2}|\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/);
+  await S('clockDate', 'none'); await S('clockSize', 20); await S('clockStyle', 'analog');
+  expect(await page.locator('#tray-clock svg.aclock').count()).toBe(1);
+  expect(await page.locator('#tray-clock span').count()).toBe(0);
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--clock-size').trim())).toBe('20px');
+  await S('clockStyle', 'lcd'); await S('clockLayout', 'stack');
+  expect(await page.locator('#tray-clock').getAttribute('data-style')).toBe('lcd');
+  // settings page has the controls
+  await page.evaluate(() => ulyOS.desktopApi.openSettings('shell'));
+  await page.waitForSelector('.set-content h3:has-text("Date & time")');
+  expect(problems).toEqual([]);
+});
+
+test('create-profile screen scrolls on a short window instead of clipping the top', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 560 });
+  await page.goto('/');
+  await page.waitForSelector('#auth');
+  const top = await page.evaluate(() => { const a = document.querySelector('#auth'); const first = a.firstElementChild.getBoundingClientRect(); return [first.top, a.scrollHeight > a.clientHeight]; });
+  expect(top[0]).toBeGreaterThanOrEqual(0);   // the first element is never pushed above the top edge
 });

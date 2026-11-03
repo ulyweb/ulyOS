@@ -11,10 +11,10 @@
 
   /** tile = squircle + gradient + soft gloss + inner border; body = the illustration (64×64 box) */
   const tile = (id, c1, c2, body) =>
-    '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" focusable="false" aria-hidden="true"><defs>' +
+    '<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" data-ri="' + id + '" focusable="false" aria-hidden="true"><defs>' +
     '<linearGradient id="ri-' + id + '" x1=".15" y1="0" x2=".85" y2="1"><stop offset="0" stop-color="' + c1 + '"/><stop offset="1" stop-color="' + c2 + '"/></linearGradient>' +
     '<linearGradient id="rg-' + id + '" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>' +
-    '<rect x="2" y="2" width="60" height="60" rx="14" fill="url(#ri-' + id + ')"/>' + body +
+    '<rect x="2" y="2" width="60" height="60" rx="14" fill="url(#ri-' + id + ')"/><g class="ri-b">' + body + '</g>' +
     '<path d="M2 16A14 14 0 0 1 16 2h32a14 14 0 0 1 14 14v7C46 31 18 31 2 23z" fill="url(#rg-' + id + ')"/>' +
     '<rect x="2.5" y="2.5" width="59" height="59" rx="13.5" fill="none" stroke="#fff" stroke-opacity=".3"/></svg>';
   const g = (id, a, b, v = 'y') => '<linearGradient id="' + id + '" x1="0" y1="0" x2="' + (v === 'x' ? 1 : 0) + '" y2="' + (v === 'x' ? 0 : 1) + '"><stop offset="0" stop-color="' + a + '"/><stop offset="1" stop-color="' + b + '"/></linearGradient>';

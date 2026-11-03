@@ -101,7 +101,7 @@
           h('div', { class: 'st-desc', text: c.desc }),
           h('div', { class: 'st-meta', text: c.cat + (c.kind === 'url' ? ' · ' + ulyOS.desktopApi.hostName(c.url) : ' · works offline') })),
         h('div', { class: 'st-act' },
-          has ? h('button', { class: 'btn sm', text: 'Open', onclick: () => ulyOS.desktopApi.launch(rec(c)) }) : h('button', { class: 'btn sm primary', text: 'Add', onclick: () => { ulyOS.desktopApi.addIcon(rec(c)); ulyOS.audit("App Store: '" + c.name + "' added to the desktop", 'ok'); ui.toast(c.name + ' added to your desktop', { type: 'ok' }); paint(); } }),
+          has ? h('button', { class: 'btn sm', text: 'Open', onclick: () => ulyOS.desktopApi.launch(rec(c)) }) : h('button', { class: 'btn sm primary', text: 'Add', onclick: () => { const inFolder = ulyOS.Desktop.icons.some((i) => i.id === 'apps' && i.kind === 'folder'); ulyOS.desktopApi.addIcon(inFolder ? { ...rec(c), folder: 'apps' } : rec(c)); ulyOS.audit("App Store: '" + c.name + "' added", 'ok'); ui.toast(c.name + (inFolder ? ' added to your Apps folder' : ' added to your desktop'), { type: 'ok' }); paint(); } }),
           has ? h('button', { class: 'btn sm', text: 'Remove', title: 'Remove from the desktop', onclick: () => { ulyOS.desktopApi.removeIcon(c.id); paint(); } }) : h('button', { class: 'btn sm', text: 'Try', title: 'Open without adding', onclick: () => ulyOS.desktopApi.launch(rec(c)) })));
     };
     paintChips(); paint();

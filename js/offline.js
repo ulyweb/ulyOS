@@ -161,8 +161,7 @@ Online version: https://ulyweb.github.io/ulyOS/
     try { await ulyOS.vault.flush(); } catch { /* ignore */ }
     clearInterval(beat); beat = 0;
     try { await fetch('/__quit', { method: 'POST', headers: { 'X-ulyOS': '1' } }); } catch { /* server already gone */ }
-    document.body.className = '';
-    document.body.replaceChildren(h('div', { style: { position: 'fixed', inset: '0', display: 'grid', placeItems: 'center', background: '#07080c', color: '#e8eaf2', fontFamily: 'system-ui, sans-serif', textAlign: 'center' } },
+    document.body.append(h('div', { style: { position: 'fixed', inset: '0', zIndex: '2147483647', display: 'grid', placeItems: 'center', background: '#07080c', color: '#e8eaf2', fontFamily: 'system-ui, sans-serif', textAlign: 'center' } },
       h('div', {}, h('div', { style: { fontSize: '42px', marginBottom: '10px' }, text: '⏻' }), h('h2', { text: 'ulyOS has stopped' }), h('p', { style: { color: '#9aa0b4' }, text: 'The local server is shut down. You can close this tab.' }))));
     try { window.close(); } catch { /* browsers only allow this for script-opened tabs */ }
   };

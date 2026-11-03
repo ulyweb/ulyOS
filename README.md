@@ -3,6 +3,19 @@
 A self-hosted, browser-based operating system in vanilla HTML, CSS and JavaScript. No frameworks, no build step.
 Live: https://ulyweb.github.io/ulyOS/
 
+## Why ulyOS
+
+ulyOS is a private workspace that runs in your browser. Your files, passwords, notes and tools sit behind one password and are encrypted on your device — there is no account to create and no ulyOS server that holds your data.
+
+- **Private by design.** Everything is encrypted at rest (AES-256-GCM) with a key only you hold: a mandatory password and, optionally, a fingerprint / passkey. Nothing is uploaded unless you choose to sync, and then only encrypted data leaves the device.
+- **Nothing to install, works anywhere.** Open it on a laptop, tablet or phone; an offline build runs without internet; encrypted sync keeps devices identical.
+- **One tidy workspace.** Encrypted files, a password and key generator, QR tools, widgets, voice (Speak, Gemini Live) and an App Store of shortcuts instead of a dozen tabs and accounts.
+- **Move data without the cloud.** Beam sends files and settings device-to-device, end-to-end encrypted; sync can use your own drive or network share.
+- **Transparent and tested.** Open source, no trackers, a visible audit log, a strict Content-Security-Policy and automated tests on every change.
+- **Good for** people handling sensitive documents, shared or borrowed computers (each profile is separately encrypted), travellers who need an offline copy, and anyone who wants control over their own data.
+
+The default layout is deliberately calm: four tools on the desktop (Gemini Live, Speak, Beam, App Store) and an **Apps** folder holding everything else, with Settings, Beam, Files and Task Manager pinned to a full-width taskbar. Everything is configurable in Settings.
+
 ## Run locally
 
 ```bash

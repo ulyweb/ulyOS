@@ -63,6 +63,7 @@ test('welcome screen and guided tour', async ({ page }) => {
   await createProfile(page, 'Tourist', PW, { tour: true });
   await page.waitForSelector('.welcome', { timeout: 8000 });
   await expect(page.locator('.welcome')).toContainText('Welcome to ulyOS');
+  await expect(page.locator('.welcome')).toContainText('Private by design');
   await expect(page.locator('.welcome')).toContainText('version ' + await page.evaluate(() => ulyOS.version));
   await page.click('.welcome button:has-text("Guided tour")');
   await page.waitForSelector('.tour-card');
@@ -70,17 +71,21 @@ test('welcome screen and guided tour', async ({ page }) => {
   expect(n).toBeGreaterThanOrEqual(10);
   await expect(page.locator('.tour-card')).toContainText('Welcome to ulyOS');
   await page.click('.tour-card button:has-text("Next")');
-  await expect(page.locator('.tour-card')).toContainText('Desktop icons');
+  await expect(page.locator('.tour-card')).toContainText('Why it is better');
   expect(await page.locator('.tour-card').innerText()).not.toContain('null');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.tour-card')).toContainText('Who it is for');
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('.tour-card')).toContainText('A calm desktop');
   await page.waitForFunction(() => { const h = document.querySelector('.tour-hole'); return h && h.getBoundingClientRect().width > 20; });
   await page.keyboard.press('ArrowRight');
   await expect(page.locator('.tour-card')).toContainText('Menu bar');
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('.tour-card')).toContainText('Dock');
-  expect(await page.evaluate(() => document.getElementById('taskbar').classList.contains('reveal'))).toBe(true);   // auto-hidden dock is revealed
+  await expect(page.locator('.tour-card')).toContainText('Taskbar');
+  expect(await page.evaluate(() => document.getElementById('taskbar').classList.contains('reveal'))).toBe(true);
   await page.keyboard.press('ArrowRight');
   await page.keyboard.press('ArrowLeft');
-  await expect(page.locator('.tour-card')).toContainText('Dock');
+  await expect(page.locator('.tour-card')).toContainText('Taskbar');
   await page.keyboard.press('Escape');
   await expect(page.locator('.tour-card')).toHaveCount(0);
   expect(await page.evaluate(() => document.getElementById('taskbar').classList.contains('reveal'))).toBe(false);

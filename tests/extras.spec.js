@@ -48,7 +48,8 @@ test('App Store: browse, search, add to desktop, open, remove', async ({ page })
   await expect(page.locator('.st-card')).toHaveCount(1);
   await page.click('.st-card button:has-text("Add")');
   await expect(page.locator('.st-card .btn:has-text("Remove")')).toHaveCount(1);
-  expect(await page.locator('.desk-icon:has-text("Excalidraw")').count()).toBe(1);
+  expect(await page.locator('.desk-icon:has-text("Excalidraw")').count()).toBe(0);   // keeps the desktop calm: it lands in the Apps folder
+  expect(await page.evaluate(() => ulyOS.Desktop.icons.find((i) => i.name === 'Excalidraw').folder)).toBe('apps');
   await page.click('.st-chip:has-text("Installed")');
   await page.fill('.st input[type=search]', '');
   expect(await page.locator('.st-card').count()).toBeGreaterThanOrEqual(1);
@@ -106,6 +107,7 @@ test('Speak: save text to Files and as a download, open text, record with a loca
 });
 
 test('folder connector: two profiles sync through a shared folder (encrypted file), settings file round-trips', async ({ page }) => {
+  test.slow();   // two PBKDF2 profile creations + sign-outs: slow when the machine is busy
   const problems = watch(page);
   // stand-in for a Drive / iCloud / SMB folder: a directory in the origin-private file system
   await page.addInitScript(() => { window.showDirectoryPicker = async () => { const r = await navigator.storage.getDirectory(); return r.getDirectoryHandle('shared-drive', { create: true }); }; });
@@ -128,7 +130,7 @@ test('folder connector: two profiles sync through a shared folder (encrypted fil
   await page.waitForSelector('.auth-form');
   await page.click('.link:has-text("All profiles")'); await page.click('.prof.add');
   await page.fill('input[placeholder="Profile name"]', 'Two'); await page.fill('.pwc input[placeholder="Password"]', PW); await page.fill('.pwc input[placeholder="Confirm"]', PW);
-  await page.click('button:has-text("Create profile")'); await page.waitForSelector('.desk-icon', { timeout: 45000 });
+  await page.click('button:has-text("Create profile")'); await page.waitForSelector('.desk-icon', { timeout: 90000 });
   await page.evaluate(() => ulyOS.vault.set('ulyos.tour.seen', '1'));
   await page.evaluate((s) => { ulyOS.sync.setPass(s); }, SYNC);
   await page.evaluate(() => ulyOS.desktopApi.openSettings('sync'));

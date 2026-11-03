@@ -3,8 +3,14 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.14.0';
+ulyOS.version = '1.15.0';
 ulyOS.CHANGELOG = [
+  { v: '1.15.0', d: '2026-11-03', n: [
+    'New default layout: a full-width Taskbar that stays visible (no floating dock, no auto-hide) with Settings, Beam, Files and Task Manager pinned',
+    'A calm desktop: only Gemini Live, Speak, Beam and App Store, plus a new Apps folder that holds every other icon (open it, search it, drag icons onto it, right-click → Move to desktop). Apps added from the App Store land in the folder. Existing profiles are migrated once; your own shortcuts are kept inside Apps',
+    'New welcome screen, guided tour and About tab that explain why ulyOS is better: private by design (encrypted at rest, no account, no server holding your data), nothing to install, one tidy workspace, device-to-device Beam and your-own-drive sync, transparent and tested — and who it is for',
+    'Offline Quit shows its goodbye screen as an overlay instead of wiping the page',
+  ] },
   { v: '1.14.0', d: '2026-11-03', n: [
     'Widgets remember where they sit relative to the nearest screen edge, so a widget on the right stays on the right when the window is resized and returns exactly when the window does; relocation keeps them in their column, they never overlap icons or each other, and dragging / resizing starts from where they are shown',
     'Speak has three voice engines: Browser voices, Gemini voices (natural, 30 voices, styles such as Whisper, Calm, Storyteller — your own API key) and the Built-in robotic voice. Gemini and Built-in audio is exported directly to WAV / MP3 with no tab-audio sharing; browser voices explain why they cannot be exported and offer recording, Built-in or Gemini',

@@ -24,8 +24,8 @@
     // memory hygiene (Settings → Security)
     clipClear: 30, purgeIdle: 120, purgeOnHide: true,
     // taskbar / dock / menu bar (see js/shell.js)
-    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 60, taskbarAutoHide: true, taskbarMagnify: true, taskbarLabels: true,
-    showRam: true, showClock: true, menubar: true, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
+    taskbarMode: 'bar', taskbarPos: 'bottom', taskbarSize: 60, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
+    showRam: true, showClock: true, menubar: true, menubarStyle: 'glass', pinned: ['settings', 'beam', 'files', 'taskmgr'],
   };
   let settings = { ...DEFAULT_SETTINGS };   // replaced with the profile's saved settings on sign-in
   const Settings = (ulyOS.settings = {
@@ -314,23 +314,28 @@
     beam: { name: 'Beam', icon: 'send', open: () => ulyOS.Beam.open() },
     live: { name: 'Gemini Live', icon: 'mic', open: () => ulyOS.Gemini.openLive() },
   };
+  /* The desktop shows four tools and one folder; everything else lives in the Apps folder (and the dock / Start menu / App Store). */
+  const A = 'apps';
   const DEFAULT_ICONS = [
-    { id: 'files', kind: 'sys', sys: 'files', name: 'Files' },
-    { id: 'polotno', kind: 'url', name: 'Polotno', url: 'https://studio.polotno.com/', glyph: 'shapes', mem: 95, w: 1100, h: 720, tint: '#c4b5fd' },
-    { id: 'getartcraft', kind: 'url', name: 'GetArtCraft', url: 'https://app.getartcraft.com/create-image', glyph: 'sparkles', mem: 140, w: 1100, h: 720, tint: '#fbbf24' },
-    { id: 'youtube', kind: 'url', name: 'YouTube', url: 'https://www.youtube.com/', glyph: 'video', mode: 'tab', tint: '#ff5c5c' },
-    { id: 'xrp', kind: 'url', name: 'XRP Price', url: 'https://coinmarketcap.com/currencies/xrp/', glyph: 'trending', mode: 'tab', tint: '#38bdf8' },
-    { id: 'outlook', kind: 'url', name: 'Outlook', url: 'https://outlook.office.com/mail', glyph: 'mail', mode: 'tab', tint: '#4fa3ff' },
-    { id: 'qrseal', kind: 'local', name: 'QR Seal', file: 'apps/qrseal.html', glyph: 'qr', mem: 60, w: 980, h: 760, tint: '#c4b5fd' },
-    { id: 'systemvault', kind: 'local', name: 'System Vault', file: 'apps/systemvault.html', glyph: 'key', mem: 62, w: 1100, h: 760, tint: '#fb7185' },
-    { id: 'cryptocompass', kind: 'local', name: 'Crypto Compass', file: 'apps/cryptocompass.html', glyph: 'compass', mem: 40, w: 1100, h: 760, tint: '#fbbf24' },
-    { id: 'taskmgr', kind: 'sys', sys: 'taskmgr', name: 'Task Manager' },
-    { id: 'settings', kind: 'sys', sys: 'settings', name: 'Settings' },
-    { id: 'speak', kind: 'sys', sys: 'speak', name: 'Speak' },
-    { id: 'store', kind: 'sys', sys: 'store', name: 'App Store' },
-    { id: 'beam', kind: 'sys', sys: 'beam', name: 'Beam' },
     { id: 'live', kind: 'sys', sys: 'live', name: 'Gemini Live' },
+    { id: 'speak', kind: 'sys', sys: 'speak', name: 'Speak' },
+    { id: 'beam', kind: 'sys', sys: 'beam', name: 'Beam' },
+    { id: 'store', kind: 'sys', sys: 'store', name: 'App Store' },
+    { id: 'apps', kind: 'folder', name: 'Apps', glyph: 'folder', tint: '#fbbf24' },
+    { id: 'files', kind: 'sys', sys: 'files', name: 'Files', folder: A },
+    { id: 'taskmgr', kind: 'sys', sys: 'taskmgr', name: 'Task Manager', folder: A },
+    { id: 'settings', kind: 'sys', sys: 'settings', name: 'Settings', folder: A },
+    { id: 'qrseal', kind: 'local', name: 'QR Seal', file: 'apps/qrseal.html', glyph: 'qr', mem: 60, w: 980, h: 760, tint: '#c4b5fd', folder: A },
+    { id: 'systemvault', kind: 'local', name: 'System Vault', file: 'apps/systemvault.html', glyph: 'key', mem: 62, w: 1100, h: 760, tint: '#fb7185', folder: A },
+    { id: 'cryptocompass', kind: 'local', name: 'Crypto Compass', file: 'apps/cryptocompass.html', glyph: 'compass', mem: 40, w: 1100, h: 760, tint: '#fbbf24', folder: A },
+    { id: 'polotno', kind: 'url', name: 'Polotno', url: 'https://studio.polotno.com/', glyph: 'shapes', mem: 95, w: 1100, h: 720, tint: '#c4b5fd', folder: A },
+    { id: 'getartcraft', kind: 'url', name: 'GetArtCraft', url: 'https://app.getartcraft.com/create-image', glyph: 'sparkles', mem: 140, w: 1100, h: 720, tint: '#fbbf24', folder: A },
+    { id: 'youtube', kind: 'url', name: 'YouTube', url: 'https://www.youtube.com/', glyph: 'video', mode: 'tab', tint: '#ff5c5c', folder: A },
+    { id: 'xrp', kind: 'url', name: 'XRP Price', url: 'https://coinmarketcap.com/currencies/xrp/', glyph: 'trending', mode: 'tab', tint: '#38bdf8', folder: A },
+    { id: 'outlook', kind: 'url', name: 'Outlook', url: 'https://outlook.office.com/mail', glyph: 'mail', mode: 'tab', tint: '#4fa3ff', folder: A },
   ];
+  const DESK_ONLY = ['live', 'speak', 'beam', 'store', 'apps'];
+  const onDesk = (i) => !i.folder;
 
   /** Icon markup for an icon record (used by desktop tiles, taskbar, window chrome). */
   function iconHTML(ic, size = 16) {
@@ -345,7 +350,49 @@
   // a favicon that fails to load simply disappears (replaces an inline onerror, which the CSP forbids)
   document.addEventListener('error', (e) => { const t = e.target; if (t && t.tagName === 'IMG' && t.dataset && t.dataset.favicon) t.remove(); }, true);
 
+  /* ---- Apps folder ---- */
+  function moveToFolder(ic, folderId) {
+    if (ic.kind === 'folder' || ic.id === folderId) return;
+    ic.folder = folderId; ic.col = undefined; ic.row = undefined;
+    Desktop.selected.delete(ic.id); Desktop.render(); ulyOS.audit("'" + ic.name + "' moved into the " + folderId + ' folder', 'info');
+  }
+  function moveToDesktop(ic) { delete ic.folder; ic.col = undefined; ic.row = undefined; Desktop.render(); ulyOS.audit("'" + ic.name + "' moved to the desktop", 'info'); }
+  function openFolder(f) {
+    const ex = WM.byApp('folder:' + f.id)[0];
+    if (ex) { WM.focus(ex); return; }
+    WM.open({ appId: 'folder:' + f.id, title: f.name, icon: icon('folder', 16), width: 680, height: 500, minWidth: 340, minHeight: 280, mem: 6, render: () => {
+      const grid = h('div', { class: 'fld-grid' });
+      let q = '';
+      const search = h('input', { class: 'input', type: 'search', placeholder: 'Search ' + f.name + '…', 'aria-label': 'Search apps', oninput: () => { q = search.value.trim().toLowerCase(); paint(); } });
+      const paint = () => {
+        const kids = Desktop.icons.filter((i) => i.folder === f.id && (!q || i.name.toLowerCase().includes(q))).sort((a, b) => a.name.localeCompare(b.name));
+        grid.replaceChildren(...(kids.length ? kids.map((ic) => {
+          const [g1, g2] = gradientOf(ic);
+          const el = h('button', { class: 'fld-item', title: ic.name },
+            h('div', { class: 'di-tile', style: { '--g1': g1, '--g2': g2, ...(ic.tint ? { '--tint': ic.tint } : {}) }, html: '<span class="glyph">' + iconHTML(ic, 28) + '</span>' }),
+            h('div', { class: 'di-label', text: ic.name }));
+          el.addEventListener('click', () => { launch(ic); ulyOS.audit("Launching '" + ic.name + "' from the " + f.name + ' folder', 'info'); });
+          el.addEventListener('contextmenu', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            ui.contextMenu(e.clientX, e.clientY, [
+              { label: 'Open', icon: 'external', action: () => launch(ic) },
+              { label: 'Move to desktop', icon: 'desktop', action: () => moveToDesktop(ic) },
+              { label: ulyOS.Shell && ulyOS.Shell.isPinned(ic.id) ? 'Remove from taskbar' : 'Keep in taskbar', icon: 'plus', action: () => ulyOS.Shell.togglePin(ic.id) },
+              { separator: true },
+              { label: 'Delete', icon: 'trash', danger: true, action: () => removeIcon(ic) },
+            ]);
+          });
+          return el;
+        }) : [h('div', { class: 'set-desc', style: { padding: '24px 6px' }, text: q ? 'Nothing matches.' : 'This folder is empty. Right-click an icon on the desktop → Move to ' + f.name + ', or drag it onto the folder.' })]));
+      };
+      paint();
+      bus.on('icons:change', () => { if (grid.isConnected) paint(); });
+      return h('div', { class: 'fld' }, h('div', { class: 'fld-top' }, search), grid);
+    } });
+  }
+
   async function launch(ic) {
+    if (ic.kind === 'folder') { openFolder(ic); return; }
     if (ic.kind === 'sys') { SYS_APPS[ic.sys].open(); return; }
     if (ic.kind === 'local') {
       const existing = WM.byApp('web:' + ic.id)[0];
@@ -375,14 +422,14 @@
   });
 
   const cell = () => ({ w: parseFloat(getComputedStyle(root).getPropertyValue('--cell-w')) || 100, h: parseFloat(getComputedStyle(root).getPropertyValue('--cell-h')) || 110 });
-  const saveIcons = () => store.set('ulyos.icons', { v: 1, list: Desktop.icons });
+  const saveIcons = () => { store.set('ulyos.icons', { v: 1, list: Desktop.icons }); bus.emit('icons:change'); };
 
   function metrics() {
     const c = cell(), el = $('#desktop');
     Desktop.cols = Math.max(1, Math.floor((el.clientWidth - Desktop.pad * 2) / c.w));
     Desktop.rows = Math.max(1, Math.floor((el.clientHeight - Desktop.pad * 2) / c.h));
   }
-  const occupied = (col, row, ignoreId) => Desktop.icons.some((i) => i.id !== ignoreId && i.col === col && i.row === row);
+  const occupied = (col, row, ignoreId) => Desktop.icons.some((i) => onDesk(i) && i.id !== ignoreId && i.col === col && i.row === row);
   function freeCellNear(col, row, ignoreId) {
     col = clamp(col, 0, Desktop.cols - 1); row = clamp(row, 0, Desktop.rows - 1);
     if (!occupied(col, row, ignoreId)) return [col, row];
@@ -412,12 +459,12 @@
   Desktop.layout = function () {
     metrics();
     // re-home icons that fall outside the visible grid, resolve collisions
-    Desktop.icons.forEach((ic) => {
+    Desktop.icons.filter(onDesk).forEach((ic) => {
       if (ic.col == null || ic.col >= Desktop.cols || ic.row >= Desktop.rows || ic.col < 0 || ic.row < 0) {
         const tmp = ic.id; ic.col = -1; ic.row = -1; const [c, r] = nextFree(); ic.col = c; ic.row = r; void tmp;
       }
     });
-    Desktop.icons.forEach(placeEl);
+    Desktop.icons.filter(onDesk).forEach(placeEl);
     saveIcons();
     bus.emit('desktop:layout');
   };
@@ -427,7 +474,7 @@
     host.querySelectorAll('.desk-icon').forEach((n) => n.remove());   // keep the #widgets layer
     Desktop.els.clear();
     metrics();
-    Desktop.icons.forEach((ic, i) => {
+    Desktop.icons.filter(onDesk).forEach((ic, i) => {
       if (ic.col == null) { const [c, r] = nextFree(); ic.col = c; ic.row = r; }
       const el = buildIcon(ic);
       el.style.setProperty('--bd', -(i * 0.9) + 's');
@@ -483,8 +530,11 @@
     const c = cell();
     const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
     let moved = false;
-    const hint = $('#cell-hint');
+    const hint = $('#cell-hint'), host = $('#desktop');
+    let lastX = e.clientX, lastY = e.clientY;
     const onMove = (ev) => {
+      lastX = ev.clientX; lastY = ev.clientY;
+      if (moved) { const o = document.elementFromPoint(lastX, lastY), t = o && o.closest && o.closest('.desk-icon'); host.querySelectorAll('.drop-target').forEach((n) => { if (n !== t) n.classList.remove('drop-target'); }); if (t && t !== el && Desktop.icons.some((i) => i.id === t.dataset.id && i.kind === 'folder')) t.classList.add('drop-target'); }
       if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
       if (!moved) { moved = true; el.classList.add('dragging'); WM.setIframesInert(true); }
       const nx = ox + ev.clientX - sx, ny = oy + ev.clientY - sy;
@@ -498,10 +548,14 @@
       document.removeEventListener('pointerup', end);
       document.removeEventListener('pointercancel', end);
       if (!moved) return;
+      const over = document.elementFromPoint(lastX, lastY), tgt = over && over.closest && over.closest('.desk-icon');   // while the dragged icon is still click-through
+      const fold = tgt && Desktop.icons.find((i) => i.id === tgt.dataset.id && i.kind === 'folder');
       el._drag = true; setTimeout(() => { el._drag = false; }, 350);
       WM.setIframesInert(false);
       el.classList.remove('dragging');
       hint.style.display = 'none';
+      host.querySelectorAll('.drop-target').forEach((n) => n.classList.remove('drop-target'));
+      if (fold && fold.id !== ic.id && ic.kind !== 'folder') { moveToFolder(ic, fold.id); return; }
       if (hint._cell) { [ic.col, ic.row] = hint._cell; }
       placeEl(ic); saveIcons();
     };
@@ -512,6 +566,7 @@
 
   /* ---- icon CRUD ---- */
   function addIcon(rec) {
+    if (rec.folder) { const ic = { ...rec, col: undefined, row: undefined }; Desktop.icons.push(ic); saveIcons(); return ic; }   // goes straight into a folder
     metrics();
     const [c, r] = nextFree();
     const ic = { col: c, row: r, ...rec };
@@ -526,6 +581,7 @@
   function removeIcon(ic, withUndo = true) {
     const idx = Desktop.icons.indexOf(ic);
     if (idx < 0) return;
+    if (ic.kind === 'folder') { Desktop.icons.forEach((c) => { if (c.folder === ic.id) { delete c.folder; c.col = undefined; c.row = undefined; } }); }
     Desktop.icons.splice(idx, 1);
     Desktop.els.get(ic.id)?.remove(); Desktop.els.delete(ic.id);
     Desktop.selected.delete(ic.id);
@@ -577,9 +633,10 @@
   }
   function autoArrange() {
     metrics();
-    Desktop.icons.forEach((i) => { i.col = -1; i.row = -1; });
-    Desktop.icons.forEach((i) => { const [c, r] = nextFree(); i.col = c; i.row = r; });
-    Desktop.icons.forEach(placeEl); saveIcons();
+    const dk = Desktop.icons.filter(onDesk);
+    dk.forEach((i) => { i.col = -1; i.row = -1; });
+    dk.forEach((i) => { const [c, r] = nextFree(); i.col = c; i.row = r; });
+    dk.forEach(placeEl); saveIcons();
     ulyOS.audit('Desktop icons auto-arranged', 'info');
   }
 
@@ -595,6 +652,7 @@
         if (n) { ulyOS.audit("Desktop icon '" + ic.name + "' renamed to '" + n.trim() + "'", 'info'); ic.name = n.trim(); Desktop.render(); }
       } },
       { label: ulyOS.Shell && ulyOS.Shell.isPinned(ic.id) ? 'Remove from taskbar' : 'Keep in taskbar', icon: 'plus', disabled: multi, action: () => ulyOS.Shell.togglePin(ic.id) },
+      ic.kind !== 'folder' && Desktop.icons.some((i) => i.kind === 'folder') ? { label: 'Move to Apps folder', icon: 'folder', action: () => sel.forEach((i) => moveToFolder(i, 'apps')) } : null,
       { separator: true },
       { label: multi ? 'Delete ' + sel.length + ' icons' : 'Delete', icon: 'trash', danger: true, shortcut: 'Del', action: () => sel.forEach((i) => removeIcon(i)) },
     ];
@@ -668,6 +726,16 @@
       Desktop.icons = Desktop.icons.filter((i) => !['photopea', 'spotify'].includes(i.id));
       store.set('ulyos.migr.dropPhotopeaSpotify', true);
       if (saved) saveIcons();
+    }
+    if (!store.get('ulyos.migr.layout2i', false)) {   // one-time: a calm desktop — four tools and an Apps folder holding the rest
+      if (saved) {
+        DESK_ONLY.forEach((id) => { if (!Desktop.icons.some((i) => i.id === id)) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === id) }); });
+        Desktop.icons.forEach((i) => { if (DESK_ONLY.includes(i.id)) delete i.folder; else i.folder = 'apps'; i.col = undefined; i.row = undefined; });
+        const rank = (id) => (DESK_ONLY.includes(id) ? DESK_ONLY.indexOf(id) : 99);
+        Desktop.icons.sort((a, b) => rank(a.id) - rank(b.id));
+        saveIcons();
+      }
+      store.set('ulyos.migr.layout2i', true);
     }
     const host = $('#desktop');
     host.addEventListener('contextmenu', (e) => {
@@ -917,12 +985,13 @@
       const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 40) : (base ? base.name : null);
       if (!name) continue;
       let rec;
-      if (base && base.kind !== 'url') rec = { ...base, name };                         // sys / local: trusted record only
+      if (base && base.kind !== 'url') rec = { ...base, name };                         // sys / local / folder: trusted record only
       else {
         const url = normalizeUrl(r.url || (base && base.url) || '');
         if (!url) continue;
         rec = { ...(base || { id: r.id, kind: 'url' }), name, url, mode: ['auto', 'window', 'tab'].includes(r.mode) ? r.mode : (base?.mode || 'auto') };
       }
+      if (r.folder === 'apps' && list.some((f) => f && f.id === 'apps')) rec.folder = 'apps'; else delete rec.folder;
       rec.col = Number.isInteger(r.col) && r.col >= 0 && r.col < 200 ? r.col : undefined;
       rec.row = Number.isInteger(r.row) && r.row >= 0 && r.row < 200 ? r.row : undefined;
       used.add(r.id); out.push(rec);
@@ -935,7 +1004,7 @@
     const data = {
       format: 'ulyOS-settings', v: 1, exported: new Date().toISOString(), profile: prof ? prof.name : '',
       settings: { ...settings, wallpaperCustom: String(settings.wallpaperCustom || '').startsWith('opfs:') ? '' : settings.wallpaperCustom },
-      icons: Desktop.icons.map((i) => ({ id: i.id, kind: i.kind, name: i.name, url: i.url, mode: i.mode, col: i.col, row: i.row })),
+      icons: Desktop.icons.map((i) => ({ id: i.id, kind: i.kind, name: i.name, url: i.url, mode: i.mode, col: i.col, row: i.row, folder: i.folder })),
       widgets: ulyOS.Widgets.exportList(),   // positions / sizes only — note text is private and never exported
     };
     if (String(settings.wallpaperCustom || '').startsWith('opfs:') && settings.wallpaper === 'custom') data.settings.wallpaper = 'void';
@@ -995,6 +1064,15 @@
     wrap.append(
       h('div', { class: 'about-hero' }, h('div', { class: 'about-logo', html: '<svg viewBox="0 0 80 80" width="44" height="44"><circle cx="40" cy="40" r="28" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="40" cy="40" r="5" fill="currentColor"/></svg>' }),
         h('div', {}, h('div', { class: 'about-name', html: 'uly<span>OS</span>' }), h('div', { class: 'mono about-ver', text: 'version ' + ulyOS.version + ' · ' + ulyOS.CHANGELOG[0].d + ' · ' + (ulyOS.config.OFFLINE ? 'offline build' : 'online build') }), h('div', { class: 'btn-row', style: { marginTop: '8px' } }, h('button', { class: 'btn sm', text: '🧭 Guided tour', onclick: () => ulyOS.tour.start() }), h('button', { class: 'btn sm', text: 'Welcome screen', onclick: () => ulyOS.tour.welcome(true) })))),
+      h('h3', { text: 'Why ulyOS' }),
+      h('div', { class: 'why' }, [
+        ['🔒 Private by design', 'Everything you keep is encrypted at rest with a key only you hold (password, or fingerprint / passkey). There is no account and no ulyOS server, so there is nothing for anyone else to breach, read or sell.'],
+        ['🌐 Nothing to install, works anywhere', 'It is a web page: open it on a laptop, tablet or phone. An offline build runs without internet, and encrypted sync keeps your devices identical when you want that.'],
+        ['🧰 One tidy workspace', 'Encrypted files, a password and key generator, QR tools, a crypto guide, widgets, voice (Speak) and Gemini Live — instead of a dozen tabs and accounts.'],
+        ['🤝 Move data without the cloud', 'Beam sends files and settings device-to-device, end-to-end encrypted. Sync can use your own drive or network share. Only encrypted data ever leaves the device.'],
+        ['🔍 Transparent and tested', 'Open source, no trackers, a visible audit log, a strict Content-Security-Policy and automated tests on every change.'],
+        ['👥 Good for', 'People handling sensitive documents, shared or borrowed computers (each profile is separately encrypted), travellers who need an offline copy, and anyone who wants control over their own data.'],
+      ].map(([t, d]) => h('div', { class: 'why-card' }, h('b', { text: t }), h('p', { text: d })))),
       h('p', { class: 'set-desc about-p', text: 'A private, browser-based operating system in vanilla HTML, CSS and JavaScript — no frameworks, no build step, no server. Everything runs on your device.' }),
       h('h3', { text: 'Security model' }),
       h('p', { class: 'set-desc about-p', text: 'Each profile’s vault (settings, layout, audit log, app data, notes) is encrypted with AES-256-GCM using a key derived by PBKDF2-SHA256 (600,000 iterations). The key is non-extractable and lives only in memory while you are signed in. There is no recovery: a forgotten password cannot be reset, so keep an encrypted backup. Typed or generated secrets can be wiped at any time with Purge memory.' }),
@@ -1234,6 +1312,10 @@
     if (!store.get('ulyos.migr.defaults4', false)) {   // one-time: 12-hour clock + neon cursor
       Object.assign(settings, { clockFormat: '12', cursorStyle: 'neon' });
       store.set('ulyos.settings', settings); store.set('ulyos.migr.defaults4', true);
+    }
+    if (!store.get('ulyos.migr.layout2s', false)) {   // one-time: classic taskbar, always visible, four pinned tools
+      Object.assign(settings, { taskbarMode: 'bar', taskbarAutoHide: false, pinned: ['settings', 'beam', 'files', 'taskmgr'] });
+      store.set('ulyos.settings', settings); store.set('ulyos.migr.layout2s', true);
     }
     if (settings.shuffleOnLogin) surprise(false);
     applySettings();

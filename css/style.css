@@ -1036,3 +1036,18 @@ body.compact .w-rz { display: none; }
 .lv-line { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 12px; max-width: 88%; line-height: 1.5; } .lv-line b { font-size: calc(10.5px * var(--fscale, 1)); letter-spacing: .08em; text-transform: uppercase; opacity: .7; }
 .lv-line.me { align-self: flex-end; background: rgba(var(--accent-rgb), .18); } .lv-line.ai { align-self: flex-start; background: rgba(var(--ink-rgb), .08); }
 .modal-actions { flex-wrap: wrap; } .modal-actions .btn { white-space: normal; text-align: center; }
+
+/* Apps folder */
+.fld { display: flex; flex-direction: column; height: 100%; padding: 14px 16px; gap: 12px; box-sizing: border-box; }
+.fld-grid { flex: 1; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 14px 8px; align-content: start; }
+.fld-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; border: 0; border-radius: 14px; background: transparent; color: var(--text); font: inherit; cursor: pointer; }
+.fld-item:hover, .fld-item:focus-visible { background: rgba(var(--ink-rgb), .08); outline: none; }
+.fld-item .di-tile { position: relative; }
+.fld-item .di-label { text-align: center; font-size: calc(12px * var(--fscale, 1)); max-width: 100%; overflow-wrap: anywhere; }
+.desk-icon.drop-target .di-tile { outline: 3px solid var(--accent); outline-offset: 3px; transform: scale(1.1); }
+
+.why { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; margin: 6px 0 16px; }
+.why-card { padding: 12px 14px; border-radius: 14px; border: 1px solid var(--border); background: var(--surface); } .why-card b { display: block; margin-bottom: 4px; } .why-card p { margin: 0; color: var(--muted); line-height: 1.5; font-size: calc(12.5px * var(--fscale, 1)); }
+.welcome-why { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 8px; text-align: left; }
+.welcome-why li { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-radius: 12px; background: rgba(var(--ink-rgb), .06); } .welcome-why li > span { font-size: 20px; } .welcome-why b { display: block; } .welcome-why small { color: var(--muted); font-size: calc(12px * var(--fscale, 1)); }
+.desk-icon.dragging { pointer-events: none; }   /* so the folder underneath can be detected as the drop target */

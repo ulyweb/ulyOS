@@ -20,8 +20,8 @@
   const Shell = (ulyOS.Shell = {});
 
   const LAYOUT_DEFAULTS = {
-    taskbarMode: 'dock', taskbarPos: 'bottom', taskbarSize: 60, taskbarAutoHide: true, taskbarMagnify: true, taskbarLabels: true,
-    showRam: true, showClock: true, menubar: true, menubarStyle: 'glass', pinned: ['files', 'taskmgr', 'settings'],
+    taskbarMode: 'bar', taskbarPos: 'bottom', taskbarSize: 60, taskbarAutoHide: false, taskbarMagnify: true, taskbarLabels: true,
+    showRam: true, showClock: true, menubar: true, menubarStyle: 'glass', pinned: ['settings', 'beam', 'files', 'taskmgr'],
   };
 
   /* ------------------------------------------------------------------------
@@ -238,6 +238,7 @@
       el._it = it;
       const ws = it.wins;
       el.classList.toggle('pinned', !!it.pinned);
+      if (it.pinned) el.dataset.app = it.app.id; else delete el.dataset.app;
       el.classList.toggle('running', ws.length > 0);
       el.classList.toggle('active', ws.some((w) => w.focused && !w.minimized));
       el.classList.toggle('minimized', ws.length > 0 && ws.every((w) => w.minimized));

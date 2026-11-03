@@ -3,8 +3,14 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.13.0';
+ulyOS.version = '1.14.0';
 ulyOS.CHANGELOG = [
+  { v: '1.14.0', d: '2026-11-03', n: [
+    'Widgets remember where they sit relative to the nearest screen edge, so a widget on the right stays on the right when the window is resized and returns exactly when the window does; relocation keeps them in their column, they never overlap icons or each other, and dragging / resizing starts from where they are shown',
+    'Speak has three voice engines: Browser voices, Gemini voices (natural, 30 voices, styles such as Whisper, Calm, Storyteller — your own API key) and the Built-in robotic voice. Gemini and Built-in audio is exported directly to WAV / MP3 with no tab-audio sharing; browser voices explain why they cannot be exported and offer recording, Built-in or Gemini',
+    'Gemini Live: talk with Gemini in real time (microphone in, voice out, live transcripts, typed messages, voice and instruction choice). The key lives only in the encrypted vault, is never exported or synced, and is sent only to generativelanguage.googleapis.com',
+    'Dialogs with several long buttons now wrap instead of overflowing',
+  ] },
   { v: '1.13.0', d: '2026-11-03', n: [
     'Beam: send files, pictures, text and your settings between two devices (PC ↔ phone) over a direct, end-to-end encrypted WebRTC link. Pair by scanning a QR code or pasting a code, check the same 6-digit number on both screens, and the receiver accepts each file. No server, no account. (It cannot talk to the LocalSend app itself — browsers cannot run its server or network discovery — it does the same job ulyOS ↔ ulyOS.)',
     'Speak → Save audio now always works: choose the new Built-in voice (eSpeak) to create a WAV or MP3 directly, and when recording a browser voice fails ulyOS offers to switch to it automatically',

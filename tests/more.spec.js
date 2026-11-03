@@ -215,3 +215,39 @@ test('offline build: "Quit ulyOS" stops the server and shows a goodbye screen', 
   expect(problems.filter((x) => !/net::|Failed to fetch/.test(x))).toEqual([]);
   await ctx.close();
 });
+
+test('widgets stay pinned to the edge they were placed against, return when the window returns, and never overlap', async ({ page }) => {
+  const problems = watch(page);
+  await createProfile(page, 'Pin');
+  await page.setViewportSize({ width: 1500, height: 950 });
+  await page.evaluate(() => ['clock', 'notes', 'crypto', 'system'].forEach((t) => ulyOS.Widgets.add(t, 'm')));
+  await page.waitForSelector('.wgt-system'); await page.waitForTimeout(500);
+  const gaps = () => page.evaluate(() => { const d = document.getElementById('desktop').getBoundingClientRect(); return [...document.querySelectorAll('.wgt')].map((w) => { const r = w.getBoundingClientRect(); return { id: w.dataset.id, right: Math.round(d.right - r.right), top: Math.round(r.top - d.top), w: Math.round(r.width) }; }); });
+  const before = await gaps();
+  expect(before.every((g) => g.right < 100)).toBe(true);   // they start at the right edge
+  for (const [vw, vh] of [[1900, 1000], [1200, 800], [1000, 700], [1500, 950]]) {
+    await page.setViewportSize({ width: vw, height: vh });
+    await page.waitForTimeout(700);
+    const r = await rects(page);
+    expect(noOverlap(r), vw + 'x' + vh).toEqual([]);
+    if (vw >= 1200) {   // wide enough that nothing needs to move: the right gap is unchanged (pinned to the right edge)
+      const now = await gaps();
+      for (const g of now) { const b = before.find((x) => x.id === g.id); expect(Math.abs(g.right - b.right), 'right gap ' + vw).toBeLessThanOrEqual(1); }
+    }
+    // never under the menu bar or the revealed dock area
+    const inside = await page.evaluate(() => { const d = document.getElementById('desktop').getBoundingClientRect(); return [...document.querySelectorAll('.wgt')].every((w) => { const r = w.getBoundingClientRect(); return r.top >= d.top - 1 && r.bottom <= d.bottom + 1 && r.left >= d.left - 1 && r.right <= d.right + 1; }); });
+    expect(inside, vw + 'x' + vh + ' inside desktop').toBe(true);
+  }
+  const back = await gaps();
+  for (const g of back) { const b = before.find((x) => x.id === g.id); expect(g.right).toBe(b.right); expect(g.top).toBe(b.top); }   // exactly where they were
+  // a widget moved to the left edge stays at the left edge when the window grows
+  await page.evaluate(() => { const l = ulyOS.Widgets.list().find((i) => i.type === 'clock'); const el = document.querySelector('.wgt-clock'); el.style.left = '260px'; el.style.top = '420px'; });
+  const box0 = await page.locator('.wgt-clock').boundingBox();
+  await page.mouse.move(box0.x + 100, box0.y + 40); await page.mouse.down(); await page.mouse.move(box0.x + 100 - 30, box0.y + 40, { steps: 4 }); await page.mouse.up();
+  const l1 = await page.locator('.wgt-clock').boundingBox();
+  await page.setViewportSize({ width: 1900, height: 950 }); await page.waitForTimeout(700);
+  const l2 = await page.locator('.wgt-clock').boundingBox();
+  expect(Math.abs(l2.x - l1.x)).toBeLessThanOrEqual(2);
+  expect(noOverlap(await rects(page))).toEqual([]);
+  expect(problems).toEqual([]);
+});

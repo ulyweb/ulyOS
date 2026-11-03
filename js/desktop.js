@@ -312,6 +312,7 @@
     speak: { name: 'Speak', icon: 'volume', open: () => ulyOS.Speech.open() },
     store: { name: 'App Store', icon: 'store', open: () => ulyOS.Store.open() },
     beam: { name: 'Beam', icon: 'send', open: () => ulyOS.Beam.open() },
+    live: { name: 'Gemini Live', icon: 'mic', open: () => ulyOS.Gemini.openLive() },
   };
   const DEFAULT_ICONS = [
     { id: 'files', kind: 'sys', sys: 'files', name: 'Files' },
@@ -328,6 +329,7 @@
     { id: 'speak', kind: 'sys', sys: 'speak', name: 'Speak' },
     { id: 'store', kind: 'sys', sys: 'store', name: 'App Store' },
     { id: 'beam', kind: 'sys', sys: 'beam', name: 'Beam' },
+    { id: 'live', kind: 'sys', sys: 'live', name: 'Gemini Live' },
   ];
 
   /** Icon markup for an icon record (used by desktop tiles, taskbar, window chrome). */
@@ -645,6 +647,11 @@
     if (!store.get('ulyos.migr.addSpeak', false)) {   // one-time: the new Speak app appears on existing desktops
       if (!Desktop.icons.some((i) => i.id === 'speak')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'speak') });
       store.set('ulyos.migr.addSpeak', true);
+      if (saved) saveIcons();
+    }
+    if (!store.get('ulyos.migr.addLive', false)) {   // one-time: the Gemini Live icon appears on existing desktops
+      if (!Desktop.icons.some((i) => i.id === 'live')) Desktop.icons.push({ ...DEFAULT_ICONS.find((d) => d.id === 'live') });
+      store.set('ulyos.migr.addLive', true);
       if (saved) saveIcons();
     }
     if (!store.get('ulyos.migr.addBeam', false)) {   // one-time: the Beam icon appears on existing desktops

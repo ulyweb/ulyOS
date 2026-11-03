@@ -50,8 +50,9 @@
     const link = { pc, dc: null, open: false, localSdp: '', remoteSdp: '' };
     const wire = (dc) => {
       link.dc = dc; dc.binaryType = 'arraybuffer'; dc.bufferedAmountLowThreshold = 1 << 20;
-      dc.onopen = () => { link.open = true; onState('open'); };
+      dc.onopen = () => { if (link.open) return; link.open = true; onState('open'); };
       dc.onclose = () => { link.open = false; onState('closed'); };
+      if (dc.readyState === 'open') queueMicrotask(() => dc.onopen());   // an answerer's channel can already be open
       dc.onmessage = (e) => { if (typeof e.data === 'string') { let m; try { m = JSON.parse(e.data); } catch { return; } if (m && typeof m.t === 'string') onMessage(m); } else onBinary(e.data); };
     };
     pc.ondatachannel = (e) => wire(e.channel);
@@ -127,12 +128,14 @@
     const pending = new Map();              // outgoing offers waiting for accept / reject
     let cur = null;                         // file currently being received
     const list = h('div', { class: 'bm-list' });
-    B._cleanup = () => { try { if (link) link.close(); } catch { /* ignore */ } link = null; B._link = null; cur = null; };
+    B._cleanup = () => { try { if (link) link.close(); } catch { /* ignore */ } link = null; B._link = null; cur = null; helloSent = false; };
     bus.on('session:lock', () => { B._cleanup(); if (root.isConnected) home('The screen was locked, so the connection was closed.'); });
 
     const note = (t) => h('p', { class: 'set-desc', text: t });
     const copyBtn = (getText) => h('button', { class: 'btn sm', text: 'Copy code', onclick: async () => { try { await ulyOS.clip.copy(getText()); ui.toast('Code copied', { type: 'ok', timeout: 1600 }); } catch { ui.toast('Select the code and copy it', { type: 'info' }); } } });
 
+    let helloSent = false;
+    const sayHello = () => { if (helloSent || !link || !link.open) return; helloSent = true; link.send({ t: 'hello', name: (ulyOS.security.profile() && ulyOS.security.profile().name) || 'ulyOS' }); };
     function newLink() {
       B._cleanup();
       link = createLink({ internet, onState, onMessage, onBinary });
@@ -142,7 +145,7 @@
     async function onState(st) {
       if (st === 'open') {
         verify = await verifyCode(link.localSdp, link.remoteSdp).catch(() => '');
-        link.send({ t: 'hello', name: (ulyOS.security.profile() && ulyOS.security.profile().name) || 'ulyOS' });
+        sayHello();
         connected();
         ulyOS.audit('Beam: device connected', 'ok');
       } else if ((st === 'closed' || st === 'failed') && root.isConnected) {
@@ -277,7 +280,7 @@
       }
     }
     function onMessage(m) {
-      if (m.t === 'hello') { peer = String(m.name || 'the other device').slice(0, 40); const b = root.querySelector('.bm-conn b'); if (b) b.textContent = 'Connected to ' + peer; }
+      if (m.t === 'hello') { peer = String(m.name || 'the other device').slice(0, 40); const b = root.querySelector('.bm-conn b'); if (b) b.textContent = 'Connected to ' + peer; sayHello(); }
       else if (m.t === 'text' && typeof m.text === 'string') { addNote(peer, m.text.slice(0, 5000)); if (ulyOS.fx && ulyOS.fx.sound) ulyOS.fx.sound('ok'); }
       else if (m.t === 'offer') {
         const id = String(m.id || ''), size = +m.size, name = safeName(m.name);

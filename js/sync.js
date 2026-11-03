@@ -18,7 +18,7 @@
   const C = ulyOS.crypto;
   const enc = new TextEncoder(), dec = new TextDecoder();
   const META = 'ulyos.sync.meta', CFG = 'ulyos.sync.cfg';
-  const EXCLUDE = /^(ulyos\.sync\.|ulyos\.audit$|ulyos\.fs\.sealed$|ulyos\.migr\.|ulyos\.welcomed$)/;
+  const EXCLUDE = /^(ulyos\.sync\.|ulyos\.gemini$|ulyos\.audit$|ulyos\.fs\.sealed$|ulyos\.migr\.|ulyos\.welcomed$)/;
   const TOMB_DAYS = 90, FILE = 'ulyos-sync.json', AAD = enc.encode('ulyOS-sync-v1');
   const API = 'https://api.github.com';
   const V = () => ulyOS.vault;

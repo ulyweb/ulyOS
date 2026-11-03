@@ -25,9 +25,10 @@ Passwords: at least 10 characters and about 45 bits of estimated entropy. There 
 - Automated tests and lint run on every push (`.github/workflows/test.yml`), including the CSP rules and a secret scan.
 
 ## Network
-The online build only talks to: your relay (Contact Admin, and a notice when a profile is created — never passwords or data), the public APIs used by widgets (CoinGecko, ESPN, Polymarket, Wikipedia, Hacker News), and — only if you turn on gist sync — `api.github.com` (and `gist.githubusercontent.com` for large files) with your token. Sync payloads are ciphertext.
+The online build only talks to: your relay (Contact Admin, and a notice when a profile is created — never passwords or data), the public APIs used by widgets (CoinGecko, ESPN, Polymarket, Wikipedia, Hacker News), and — only if you turn on gist sync — `api.github.com` (and `gist.githubusercontent.com` for large files) with your token, and — only if you use Gemini voices or Gemini Live — `generativelanguage.googleapis.com` with your Google API key (kept in the vault, never exported or synced). Sync payloads are ciphertext.
 
 ## Known limits
+- Gemini features send your text (voices) or microphone audio (Live) to Google under your own API key; Google's terms and quotas apply. The API key is sent to Google as a header (voices) or in the WebSocket address (Live, which is how that API authenticates).
 - Anyone with the unlocked browser, malware, or a hostile extension can read what the page can read. While a profile is open the master key is held in memory (the lock screen and the "sign out after lock" timer discard it).
 - The failed-attempt delay is stored in the browser, so it slows a casual guesser but not someone attacking a copy of your data offline — for the password, its strength is your real protection; a passkey removes that guessing surface.
 - The sync token is stored in your encrypted vault and is only as safe as the open session; use a token limited to the `gist` permission and revoke it if a device is lost. The sync passphrase protects the gist: choose a strong one.

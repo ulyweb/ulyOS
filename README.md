@@ -44,6 +44,13 @@ Settings → Sync. Settings, desktop layout, widgets and app data are packed int
 - **Speak → Save audio**: *Browser voice* records the tab's audio while it speaks (cloud voices cannot be captured); *Built-in voice* synthesizes the file itself with eSpeak (robotic, 12 languages, works offline and always). WAV or MP3.
 - Third-party code in `vendor/` is listed in `vendor/README.md`; the eSpeak build is GPL-3.0-or-later.
 
+## Gemini voices and Gemini Live (optional, your own API key)
+- Get a key at <https://aistudio.google.com/apikey>. Add it in **Speak → Gemini** or in the **Gemini Live** window. It is stored only in your encrypted vault, is never included in settings exports, backups' sync bundles or gists, and is sent only to `generativelanguage.googleapis.com` (the one extra host the page may talk to, over HTTPS and WSS).
+- **Speak → Gemini voices**: 30 natural voices and style presets (Whisper, Calm, Cheerful, Storyteller, News anchor…) — the model follows the plain-language direction placed before your text. The audio arrives as data, so it is **exported directly** to WAV / MP3: no tab audio, no recording. Model names are editable in code (`js/gemini.js`) as Google renames its preview models.
+- **Gemini Live**: real-time spoken conversation (microphone → Google → voice reply, with transcripts and typed messages). Needs a microphone and HTTPS or localhost; use headphones. Usage is limited or billed by Google under your key.
+- Why browser voices cannot be saved: the page is never given the audio of the browser's own speech engine; the only trick is recording the tab while it plays, which needs “Share tab audio”. Gemini and the built-in voice produce audio data themselves, so they do not need it.
+- These features were tested against a simulated Google API (REST and WebSocket) in the automated tests; only you can check them against the real service with your key.
+
 ## Tests
 ```bash
 npm ci

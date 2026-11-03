@@ -12,7 +12,7 @@
   const supported = !!(synth && window.SpeechSynthesisUtterance);
   const S = (ulyOS.Speech = { supported });
   const KEY = 'ulyos.speech';
-  const DEF = { voice: '', rate: 1, pitch: 1, volume: 1, perWord: true };
+  const DEF = { voice: '', rate: 1, pitch: 1, volume: 1, perWord: true, engine: '', bv: 'en/en-us' };
   const prefs = () => { try { return { ...DEF, ...(JSON.parse(ulyOS.vault.get(KEY) || '{}')) }; } catch { return { ...DEF }; } };
   const save = (p) => ulyOS.vault.set(KEY, JSON.stringify(p));
   let voices = [];
@@ -153,49 +153,62 @@
 
   function build(win) {
     const p = prefs();
-    if (!supported) return h('div', { class: 'spk' }, h('p', { class: 'set-desc', text: 'Your browser does not provide a speech engine, so ulyOS cannot speak. Chrome, Edge and Safari do.' }));
-    const ta = h('textarea', { placeholder: 'Type or paste something… then press Speak.\nWith “speak each word as I type” on, every word is read out when you finish it.', spellcheck: false, 'aria-label': 'Text to speak' });
+    const hasGem = () => !!(ulyOS.Gemini && ulyOS.Gemini.hasKey());
+    if (!['browser', 'gemini', 'builtin'].includes(p.engine)) p.engine = hasGem() ? 'gemini' : (supported ? 'browser' : 'builtin');
+    const ta = h('textarea', { placeholder: 'Type or paste something… then press Speak.\nWith the browser engine and “speak each word as I type” on, every word is read out when you finish it.', spellcheck: false, 'aria-label': 'Text to speak' });
     const now = h('div', { class: 'spk-now' });
-    const voiceSel = h('select', { class: 'input sm', 'aria-label': 'Voice' });
+    const stopAll = () => { S.stop(); if (ulyOS.Gemini) ulyOS.Gemini.stopPlay(); };
+
+    /* ----- engine + its options ----- */
+    const engSel = h('select', { class: 'input sm', 'aria-label': 'Voice engine', onchange: () => { p.engine = engSel.value; save(p); showEngine(); } },
+      h('option', { value: 'browser', text: 'Browser voices (instant, cannot be saved directly)', disabled: !supported }),
+      h('option', { value: 'gemini', text: 'Gemini voices (natural, whisper & styles — needs your API key)' }),
+      h('option', { value: 'builtin', text: 'Built-in voice (robotic, offline, saves directly)' }));
+    engSel.value = p.engine;
+    const voiceSel = h('select', { class: 'input sm', 'aria-label': 'Browser voice' });
     const paintVoices = () => {
       loadVoices();
       const list = voices.slice().sort((a, b) => (a.lang + a.name).localeCompare(b.lang + b.name));
       voiceSel.replaceChildren(h('option', { value: '', text: 'Default voice' }), ...list.map((v) => h('option', { value: v.voiceURI, text: v.name + ' (' + v.lang + (v.localService ? ', local' : '') + ')', selected: v.voiceURI === p.voice })));
     };
-    paintVoices(); synth.addEventListener?.('voiceschanged', paintVoices); setTimeout(paintVoices, 400);
+    if (supported) { paintVoices(); synth.addEventListener?.('voiceschanged', paintVoices); setTimeout(paintVoices, 400); }
     voiceSel.addEventListener('change', () => { p.voice = voiceSel.value; save(p); });
+    const perWord = h('input', { type: 'checkbox', checked: !!p.perWord, onchange: () => { p.perWord = perWord.checked; save(p); } });
+    const gc = ulyOS.Gemini ? ulyOS.Gemini.config() : {};
+    const gVoice = h('select', { class: 'input sm', 'aria-label': 'Gemini voice', onchange: () => ulyOS.Gemini.save({ voice: gVoice.value }) }, (ulyOS.Gemini ? ulyOS.Gemini.VOICES : []).map(([n, d]) => h('option', { value: n, text: n + ' — ' + d, selected: n === gc.voice })));
+    const gStyle = h('select', { class: 'input sm', 'aria-label': 'Speaking style', onchange: () => ulyOS.Gemini.save({ style: gStyle.value }) }, (ulyOS.Gemini ? ulyOS.Gemini.STYLES : []).map(([v, l]) => h('option', { value: v, text: l, selected: v === gc.style })));
+    const gKey = h('button', { class: 'btn sm', onclick: () => ulyOS.Gemini.keyDialog(paintKey)() });
+    const paintKey = () => { gKey.textContent = hasGem() ? 'API key: ' + ulyOS.Gemini.config().key : 'Add API key…'; };
+    paintKey();
+    const bvSel = h('select', { class: 'input sm', 'aria-label': 'Built-in voice language', onchange: () => { p.bv = bvSel.value; save(p); } }, S.builtinVoices.map(([v, l]) => h('option', { value: v, text: l, selected: v === (p.bv || 'en/en-us') })));
+    const gBox = h('div', { class: 'spk-row' }, h('label', {}, 'Voice', gVoice), h('label', {}, 'Style', gStyle), gKey, h('span', { class: 'set-desc', text: 'Style presets include “Whisper”. The key stays in your encrypted vault.' }));
+    const bBox = h('div', { class: 'spk-row' }, h('label', {}, 'Language', bvSel));
+    const brBox = h('div', { class: 'spk-row' }, h('label', {}, perWord, 'Speak each word as I type'), voiceSel);
+    const showEngine = () => { gBox.hidden = p.engine !== 'gemini'; bBox.hidden = p.engine !== 'builtin'; brBox.hidden = p.engine !== 'browser'; };
+    showEngine();
     const slider = (key, min, max, step, label, fmt) => {
       const out = h('b', { class: 'mono', text: fmt(p[key]) });
       const inp = h('input', { type: 'range', min, max, step, value: p[key], 'aria-label': label, oninput: () => { p[key] = +inp.value; out.textContent = fmt(p[key]); save(p); } });
       return h('label', {}, label, inp, out);
     };
-    const engSel = h('select', { class: 'input sm', 'aria-label': 'Voice for the audio file', onchange: () => { bvSel.hidden = engSel.value !== 'builtin'; } },
-      h('option', { value: 'browser', text: 'Browser voice (records this tab)' }), h('option', { value: 'builtin', text: 'Built-in voice (robotic, always works)' }));
-    const bvSel = h('select', { class: 'input sm', hidden: true, 'aria-label': 'Built-in voice language' }, S.builtinVoices.map(([v, l]) => h('option', { value: v, text: l })));
-    const fmtSel = h('select', { class: 'input sm', 'aria-label': 'Audio format' }, h('option', { value: 'wav', text: 'WAV (lossless)' }), h('option', { value: 'mp3', text: 'MP3 (smaller)' }));
-    const saveAudio = async () => {
-      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim(), text = sel || ta.value;
-      if (!text.trim()) { ta.focus(); ui.toast('Type something to speak first', { type: 'info' }); return; }
-      const fmt = fmtSel.value, name = 'speech-' + ulyOS.util.stamp() + '.' + fmt, kind = fmt.toUpperCase() + ' audio';
-      const builtin = async () => {
-        now.textContent = 'Creating audio with the built-in voice…';
-        try { const blob = await S.renderBuiltin(text, fmt, { voice: bvSel.value }); now.textContent = ''; await saveFile(blob, name, kind); }
-        catch (err) { now.textContent = ''; ui.toast(err.message, { type: 'err', timeout: 7000 }); }
-      };
-      if (engSel.value === 'builtin') { await builtin(); return; }
-      if (!S.canRecord) { if (await ui.confirm({ title: 'Recording is not available here', message: 'This browser cannot record the tab’s audio. Create the file with the built-in voice instead? It sounds robotic but works everywhere.', okText: 'Use built-in voice' })) await builtin(); return; }
-      if (!(await ui.confirm({ title: 'Record speech to a file', message: 'Your browser will ask what to share. Choose “This tab” and make sure “Share tab audio” is ticked, then ulyOS speaks the text and saves what it hears as ' + fmt.toUpperCase() + '. Nothing leaves your device. (Prefer a guaranteed result? Cancel and pick “Built-in voice”.)', okText: 'Continue' }))) return;
-      try {
-        const blob = await S.record(text, fmt, (m) => { now.textContent = m; });
-        now.textContent = '';
-        await saveFile(blob, name, kind);
-      } catch (err) {
-        now.textContent = ''; S.stop();
-        if (err.name === 'NotAllowedError') { ui.toast('Recording was cancelled', { type: 'info' }); return; }
-        if (S.CANT_RECORD.test(err.message) && await ui.confirm({ title: 'This voice could not be recorded', message: 'Your browser plays this voice outside the page, so nothing could be captured. Create the file with the built-in voice instead? It sounds robotic but always works.', okText: 'Use built-in voice' })) { await builtin(); return; }
-        ui.toast(err.message, { type: 'err', timeout: 7000 });
-      }
+
+    /* ----- synthesis for the non-browser engines ----- */
+    const render = async (text) => {   // → { pcm, rate }
+      if (p.engine === 'gemini') { now.textContent = 'Asking Gemini…'; return ulyOS.Gemini.tts(text, { voice: gVoice.value, style: gStyle.value }); }
+      now.textContent = 'Creating audio…';
+      return S.synthesize(text, { voice: p.bv || 'en/en-us' });
     };
+    const selectedText = () => { const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim(); return sel || ta.value; };
+    const speakAll = async () => {
+      const text = selectedText();
+      if (!text.trim()) { ta.focus(); return; }
+      stopAll();
+      if (p.engine === 'browser') { S.speak(text, { onstart: () => { now.replaceChildren('Speaking…'); }, onend: () => { now.textContent = ''; } }); return; }
+      try { const { pcm, rate } = await render(text); now.textContent = 'Speaking…'; ulyOS.Gemini.playPcm(pcm, rate, () => { now.textContent = ''; }); }
+      catch (err) { now.textContent = ''; ui.toast(err.message, { type: 'err', timeout: 7000 }); }
+    };
+    const fmtSel = h('select', { class: 'input sm', 'aria-label': 'Audio format' }, h('option', { value: 'wav', text: 'WAV (lossless)' }), h('option', { value: 'mp3', text: 'MP3 (smaller)' }));
+
     /** Ask where to put a file: the encrypted Files sandbox (Documents/Speak) and/or a normal download. */
     const saveFile = async (blob, defName, kind) => {
       const v = await ui.form({ title: 'Save ' + kind, message: 'Choose a name and where to keep it.', okText: 'Save',
@@ -214,6 +227,38 @@
       ulyOS.audit("Speak: saved '" + name + "' (" + blob.size + ' bytes)', 'ok');
       return true;
     };
+    const encodeFrom = async ({ pcm, rate }, fmt) => (fmt === 'mp3' ? encodeMp3(pcm, rate) : encodeWav(pcm, rate));
+    const recordFlow = async (text, fmt, name, kind) => {
+      if (!S.canRecord) { ui.toast('This browser cannot record the tab’s audio — pick the Built-in or Gemini engine', { type: 'err', timeout: 6000 }); return; }
+      if (!(await ui.confirm({ title: 'Record this browser voice', message: 'Browsers do not hand web pages the audio of their own voices, so the only way to keep it is to record it while it plays. Your browser will ask what to share: choose “This tab” and tick “Share tab audio”. Nothing leaves your device.', okText: 'Continue' }))) return;
+      try { const blob = await S.record(text, fmt, (m) => { now.textContent = m; }); now.textContent = ''; await saveFile(blob, name, kind); }
+      catch (err) {
+        now.textContent = ''; S.stop();
+        if (err.name === 'NotAllowedError') { ui.toast('Recording was cancelled', { type: 'info' }); return; }
+        ui.toast(err.message + (S.CANT_RECORD.test(err.message) ? ' — choose the Built-in or Gemini engine to save this text.' : ''), { type: 'err', timeout: 8000 });
+      }
+    };
+    const saveAudio = async () => {
+      const text = selectedText();
+      if (!text.trim()) { ta.focus(); ui.toast('Type something to speak first', { type: 'info' }); return; }
+      const fmt = fmtSel.value, name = 'speech-' + ulyOS.util.stamp() + '.' + fmt, kind = fmt.toUpperCase() + ' audio';
+      let engine = p.engine;
+      if (engine === 'browser') {
+        const c = await ui.choose({ title: 'Saving a browser voice', message: 'Browsers keep the audio of their own voices to themselves, so a page cannot export it directly. Choose how to continue:',
+          choices: [{ label: 'Cancel', value: null }, { label: 'Record it (needs tab audio)', value: 'record' }, { label: 'Built-in voice (robotic)', value: 'builtin' }, { label: 'Gemini voice (natural)', value: 'gemini', primary: true }] });
+        if (!c) return;
+        if (c === 'record') { await recordFlow(text, fmt, name, kind); return; }
+        if (c === 'gemini' && !hasGem()) { await ulyOS.Gemini.keyDialog(paintKey)(); if (!hasGem()) return; }
+        engine = c;
+      }
+      try {
+        let audio;
+        if (engine === 'gemini') { now.textContent = 'Asking Gemini…'; audio = await ulyOS.Gemini.tts(text, { voice: gVoice.value, style: gStyle.value }); }
+        else { now.textContent = 'Creating audio…'; audio = await S.synthesize(text, { voice: p.bv || 'en/en-us' }); }
+        const blob = await encodeFrom(audio, fmt); now.textContent = '';
+        await saveFile(blob, name, kind);
+      } catch (err) { now.textContent = ''; ui.toast(err.message, { type: 'err', timeout: 7000 }); }
+    };
     const saveText = async () => {
       if (!ta.value.trim()) { ta.focus(); ui.toast('Nothing to save yet — type something first', { type: 'info' }); return; }
       await saveFile(new Blob([ta.value], { type: 'text/plain' }), 'speak-' + ulyOS.util.stamp() + '.txt', 'text');
@@ -223,38 +268,32 @@
       inp.addEventListener('change', async () => { const f = inp.files[0]; if (!f) return; if (f.size > 1e6) { ui.toast('That file is too large (1 MB max)', { type: 'err' }); return; } ta.value = (await f.text()).slice(0, 20000); ta.focus(); });
       inp.click();
     };
-    const speakAll = () => {
-      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd).trim();
-      const text = sel || ta.value;
-      if (!text.trim()) { ta.focus(); return; }
-      S.speak(text, { onstart: () => { now.replaceChildren('Speaking…'); }, onend: () => { now.textContent = ''; } });
-    };
-    const perWord = h('input', { type: 'checkbox', checked: !!p.perWord, onchange: () => { p.perWord = perWord.checked; save(p); } });
     ta.addEventListener('input', (e) => {
-      if (!perWord.checked) return;
+      if (p.engine !== 'browser' || !perWord.checked) return;
       if (!(e.inputType === 'insertText' && /[\s.,!?;:]/.test(e.data || '')) && e.inputType !== 'insertLineBreak') return;
       const before = ta.value.slice(0, ta.selectionStart);
       const m = before.match(/([^\s.,!?;:]+)[\s.,!?;:]+$/);
       if (m) { S.speak(m[1], { onstart: () => { now.replaceChildren('Speaking: ', h('b', { text: m[1] })); }, onend: () => { now.textContent = ''; } }); }
     });
     const el = h('div', { class: 'spk' }, ta,
+      h('div', { class: 'spk-row' }, h('b', { text: 'Voice' }), engSel),
+      brBox, gBox, bBox,
       h('div', { class: 'spk-row' },
         h('button', { class: 'btn primary speak-go', html: icon('volume', 14) + ' Speak', title: 'Speak the selection, or everything', onclick: speakAll }),
-        h('button', { class: 'btn', html: icon('pause', 14) + ' Pause', onclick: () => synth.pause() }),
-        h('button', { class: 'btn', html: icon('play', 14) + ' Resume', onclick: () => synth.resume() }),
-        h('button', { class: 'btn', html: icon('stop', 14) + ' Stop', onclick: S.stop }),
+        h('button', { class: 'btn', html: icon('pause', 14) + ' Pause', onclick: () => { if (supported) synth.pause(); ulyOS.Gemini?.pausePlay?.(); } }),
+        h('button', { class: 'btn', html: icon('play', 14) + ' Resume', onclick: () => { if (supported) synth.resume(); ulyOS.Gemini?.resumePlay?.(); } }),
+        h('button', { class: 'btn', html: icon('stop', 14) + ' Stop', onclick: stopAll }),
         h('button', { class: 'btn', text: 'Clear', onclick: () => { ta.value = ''; ta.focus(); } }),
         h('span', { class: 'grow' }),
         h('button', { class: 'btn', html: icon('save', 14) + ' Save text…', onclick: saveText }),
         h('button', { class: 'btn', html: icon('upload', 14) + ' Open…', onclick: openText })),
-      h('div', { class: 'spk-row' }, h('label', {}, perWord, 'Speak each word as I type'), voiceSel),
       h('div', { class: 'spk-row spk-save' },
-        h('b', { text: 'Save as audio' }), fmtSel, engSel, bvSel,
-        h('button', { class: 'btn', html: icon('download', 14) + ' Save audio…', title: 'Create an audio file from the text', onclick: saveAudio }),
-        h('span', { class: 'set-desc', text: 'Browser voice: choose “This tab” and tick “Share tab audio” in the prompt. Built-in voice: made directly, no prompt.' })),
+        h('b', { text: 'Save as audio' }), fmtSel,
+        h('button', { class: 'btn', html: icon('download', 14) + ' Save audio…', title: 'Create a WAV or MP3 file from the text', onclick: saveAudio }),
+        h('span', { class: 'set-desc', text: 'Gemini and Built-in voices are exported directly. Browser voices can only be recorded while they play.' })),
       h('div', { class: 'spk-row' }, slider('rate', 0.5, 2, 0.1, 'Speed', (v) => (+v).toFixed(1) + '×'), slider('pitch', 0.5, 1.8, 0.1, 'Pitch', (v) => (+v).toFixed(1)), slider('volume', 0, 1, 0.05, 'Volume', (v) => Math.round(v * 100) + '%')),
       now);
-    win.onClose = () => S.stop();
+    win.onClose = () => stopAll();
     setTimeout(() => ta.focus(), 60);
     return el;
   }

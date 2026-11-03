@@ -471,30 +471,53 @@
   /** width/height of an instance: free-form if the user resized it, else the preset */
   const dim = (i) => [i.w || SIZES[i.size][0], i.h || SIZES[i.size][1]];
   const sizeOf = (r) => (Number.isFinite(+r.w) && Number.isFinite(+r.h) && r.w && r.h ? { w: clamp(Math.round(+r.w), MINW, MAXW), h: clamp(Math.round(+r.h), MINH, MAXH) } : {});
+  // (anchors are read with anchorSan(r))
+  /** Where a widget sits is remembered relative to its NEAREST screen edges (like a phone's home screen), so a widget
+      on the right stays on the right when the window is resized instead of floating toward the middle. */
+  const anchorOf = (i) => (i.ax ? { ax: i.ax, ox: i.ox, ay: i.ay, oy: i.oy } : {});
+  const anchorSan = (r) => (['l', 'r'].includes(r.ax) && ['t', 'b'].includes(r.ay) && Number.isFinite(+r.ox) && Number.isFinite(+r.oy) ? { ax: r.ax, ay: r.ay, ox: clamp(Math.round(+r.ox), 0, 6000), oy: clamp(Math.round(+r.oy), 0, 6000) } : {});
+  function setAnchor(i, x, y, w, hh) {
+    const a = area(), right = a.w - (x + w), bottom = a.h - (y + hh);
+    i.x = x; i.y = y;
+    i.ax = right < x ? 'r' : 'l'; i.ox = Math.max(0, Math.round(i.ax === 'r' ? right : x));
+    i.ay = bottom < y ? 'b' : 't'; i.oy = Math.max(0, Math.round(i.ay === 'b' ? bottom : y));
+  }
+  /** preferred top-left for an instance of size w × hh in the current area */
+  function posOf(i, w, hh) {
+    const a = area();
+    if (!i.ax) setAnchor(i, clamp(i.x, 0, Math.max(0, a.w - w)), clamp(i.y, 0, Math.max(0, a.h - hh)), w, hh);   // saved before anchors existed
+    return [i.ax === 'r' ? a.w - w - i.ox : i.ox, i.ay === 'b' ? a.h - hh - i.oy : i.oy];
+  }
   const bucket = (w, hh) => (hh >= 440 ? 'x' : hh >= 300 ? 'l' : w >= 300 ? 'm' : 's');
   const uid = () => 'wg_' + Math.random().toString(36).slice(2, 9);
   const area = () => ({ w: layer ? layer.clientWidth : window.innerWidth, h: layer ? layer.clientHeight : window.innerHeight });
   const cfgOf = (i) => { const o = {}; ['tokens', 'watch', 'leagues', 'sources', 'team', 'tab'].forEach((k) => { if (i[k] !== undefined) o[k] = i[k]; }); return o; };
-  const save = debounce(() => store.set('ulyos.widgets', { v: 1, list: insts.map((i) => ({ id: i.id, type: i.type, size: i.size, x: i.x, y: i.y, ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i), ...(i.type === 'notes' ? { text: i.text } : {}) })) }), 200);
+  const save = debounce(() => store.set('ulyos.widgets', { v: 1, list: insts.map((i) => ({ id: i.id, type: i.type, size: i.size, x: i.x, y: i.y, ...anchorOf(i), ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i), ...(i.type === 'notes' ? { text: i.text } : {}) })) }), 200);
 
-  /** First free rectangle on the right, scanning leftwards — never on top of desktop icons or other widgets. */
   const iconBlocks = () => {
     const cw = parseFloat(css('--cell-w')) || 100, ch = parseFloat(css('--cell-h')) || 110, pad = (ulyOS.Desktop && ulyOS.Desktop.pad) || 16;
     return ((ulyOS.Desktop && ulyOS.Desktop.icons) || []).filter((i) => i.col != null).map((i) => ({ x: pad + i.col * cw, y: pad + i.row * ch, w: cw, h: ch }));
   };
   const overlaps = (blocks, x, y, w, hh) => blocks.some((b) => x < b.x + b.w && x + w > b.x && y < b.y + b.h && y + hh > b.y);
-  /** First free rectangle on the right, scanning leftwards — never on top of desktop icons or other widgets. */
-  function findSpot(w, hh, blocks) {
-    const a = area();
-    for (let x = a.w - w - 24; x >= 0; x -= 24) {
-      for (let y = 64; y + hh <= a.h; y += 24) { if (!overlaps(blocks, x, y, w, hh)) return { x: Math.round(x / 8) * 8, y: Math.round(y / 8) * 8 }; }
+  /** The free rectangle (inside the area, clear of icons and the blocks given) closest to the wanted top-left. */
+  function nearestSpot(wantX, wantY, w, hh, blocks) {
+    const a = area(); let best = null, bd = Infinity;
+    const maxX = a.w - w, maxY = a.h - hh;
+    if (maxX < 0 || maxY < 0) return null;
+    const xs = [clamp(wantX, 0, maxX)], ys = [clamp(wantY, 0, maxY)];
+    for (let x = 0; x <= maxX; x += 16) xs.push(x); xs.push(maxX);
+    for (let y = 0; y <= maxY; y += 16) ys.push(y); ys.push(maxY);
+    for (const x of xs) for (const y of ys) {
+      const d = 2.5 * Math.abs(x - wantX) + Math.abs(y - wantY);   // prefer staying in the same column
+      if (d < bd && !overlaps(blocks, x, y, w, hh)) { bd = d; best = { x, y }; }
     }
-    return null;
+    return best;
   }
   function freeSpot(size) {
-    const [w, hh] = SIZES[size];
-    const blocks = [...iconBlocks(), ...insts.map((i) => { const [iw, ih] = dim(i); return { x: i.x, y: i.y, w: iw, h: ih }; })];
-    return findSpot(w, hh, blocks) || { x: clamp(area().w - w - 24, 0, area().w), y: 64 + (insts.length % 5) * 24 };   // screen is full: stack with an offset
+    const [w, hh] = SIZES[size], a = area();
+    const blocks = [...iconBlocks(), ...insts.map((i) => { const [iw, ih] = dim(i); const [px, py] = posOf(i, iw, ih); return { x: px, y: py, w: iw, h: ih }; })];
+    const sp = nearestSpot(a.w - w - 24, 16, w, hh, blocks);   // start at the top right, like the previous widgets
+    return sp || { x: clamp(a.w - w - 24, 0, a.w), y: 16 + (insts.length % 5) * 24 };   // screen is full: stack with an offset
   }
 
   function mount(inst) {
@@ -511,7 +534,8 @@
     grip.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || document.body.classList.contains('compact')) return;
       e.preventDefault(); e.stopPropagation();
-      const sx = e.clientX, sy = e.clientY, [ow, oh] = dim(inst);
+      const sx = e.clientX, sy = e.clientY, [ow, oh] = [el.offsetWidth, el.offsetHeight];
+      inst.x = el.offsetLeft; inst.y = el.offsetTop;   // continue from where it is shown
       try { grip.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       el.classList.add('resizing'); WM.setIframesInert(true);
       const mv = (ev) => {
@@ -527,7 +551,8 @@
       const up = () => {
         grip.removeEventListener('pointermove', mv); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
         try { grip.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-        el.classList.remove('resizing'); WM.setIframesInert(false); save(); relayout();
+        el.classList.remove('resizing'); WM.setIframesInert(false);
+        setAnchor(inst, el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight); save(); relayout();
       };
       grip.addEventListener('pointermove', mv); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
     });
@@ -539,7 +564,7 @@
     el.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); ui.contextMenu(e.clientX, e.clientY, itemMenu(inst)); });
     el.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || document.body.classList.contains('compact') || e.target.closest('button,input,textarea,select,a,canvas,.w-nodrag')) return;
-      const sx = e.clientX, sy = e.clientY, ox = inst.x, oy = inst.y;
+      const sx = e.clientX, sy = e.clientY, ox = el.offsetLeft, oy = el.offsetTop;
       let moved = false;
       try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       const mv = (ev) => {
@@ -552,7 +577,7 @@
       const up = () => {
         el.removeEventListener('pointermove', mv); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
         try { el.releasePointerCapture(e.pointerId); } catch { /* ignore */ }
-        if (moved) { el.classList.remove('dragging'); WM.setIframesInert(false); save(); relayout(); }
+        if (moved) { el.classList.remove('dragging'); WM.setIframesInert(false); setAnchor(inst, el.offsetLeft, el.offsetTop, el.offsetWidth, el.offsetHeight); save(); relayout(); }
       };
       el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     });
@@ -570,6 +595,7 @@
     if (insts.length >= MAX) { ui.toast('Widget limit reached (' + MAX + ')', { type: 'info' }); return null; }
     const sz = size || TYPES[type].size;
     const inst = { id: uid(), type, size: sz, ...freeSpot(sz) };
+    { const [iw, ih] = dim(inst); setAnchor(inst, inst.x, inst.y, iw, ih); }
     insts.push(inst); mount(inst); save(); bus.emit('widgets:change');
     if (!SETTINGS().get('widgetsVisible')) SETTINGS().set('widgetsVisible', true);
     ulyOS.audit("Widget '" + TYPES[type].name + "' added to the desktop", 'info');
@@ -586,8 +612,8 @@
     if (!inst || !SIZES[size] || inst.size === size) return;
     unmount(id); inst.size = size; delete inst.w; delete inst.h;
     const a = area(), [w, hh] = SIZES[size];
-    inst.x = clamp(inst.x, 0, Math.max(0, a.w - w)); inst.y = clamp(inst.y, 0, Math.max(0, a.h - hh));
-    mount(inst); save();
+    { const l = live.get(id); const cx = l ? l.el.offsetLeft : inst.x, cy = l ? l.el.offsetTop : inst.y; setAnchor(inst, clamp(cx, 0, Math.max(0, a.w - w)), clamp(cy, 0, Math.max(0, a.h - hh)), w, hh); }
+    mount(inst); save(); relayout();
   };
   W.rebuild = function (id) {
     const inst = insts.find((x) => x.id === id);
@@ -642,13 +668,13 @@
       list,
       h('div', { class: 'set-desc', text: 'Drag a widget to move it; right-click for size and removal. Crypto prices call the public CoinGecko API (only while that widget exists).' }));
   };
-  W.exportList = () => insts.map((i) => ({ type: i.type, size: i.size, x: i.x, y: i.y, ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i) }));
+  W.exportList = () => insts.map((i) => ({ type: i.type, size: i.size, x: i.x, y: i.y, ...anchorOf(i), ...(i.w ? { w: i.w, h: i.h } : {}), ...cfgOf(i) }));
   W.importList = function (list) {
     if (!Array.isArray(list)) return;
     W.clear();
     list.slice(0, MAX).forEach((r) => {
       if (!r || !TYPES[r.type] || !SIZES[r.size]) return;
-      const inst = { id: uid(), type: r.type, size: r.size, x: clamp(Math.round(+r.x) || 0, 0, 4000), y: clamp(Math.round(+r.y) || 0, 0, 4000), ...sizeOf(r), ...cleanCfg(r) };
+      const inst = { id: uid(), type: r.type, size: r.size, x: clamp(Math.round(+r.x) || 0, 0, 4000), y: clamp(Math.round(+r.y) || 0, 0, 4000), ...sizeOf(r), ...anchorSan(r), ...cleanCfg(r) };
       insts.push(inst); mount(inst);
     });
     relayout(); save(); bus.emit('widgets:change');
@@ -662,21 +688,22 @@
     if (!layer || document.body.classList.contains('compact')) return;
     const a = area();
     const order = [...insts].sort((p, q) => p.y - q.y || p.x - q.x).filter((i) => live.get(i.id));
-    /** Place everyone. Widgets whose chosen spot is free keep it at full size; the others move, shrunk by factor k
-        (0 = minimum size). Returns null if some widget has nowhere to go. */
+    /** Place everyone at their anchored spot if it is clear; otherwise at the nearest clear spot, shrunk by factor k when
+        needed (0 = minimum size). Returns null if some widget has nowhere to go (unless cascade is allowed). */
     const plan = (k, cascade) => {
       const blocks = iconBlocks(), out = [];
       let n = 0;
       for (const i of order) {
         let [w, hh] = dim(i);
-        w = Math.min(w, Math.max(MINW, a.w - 16)); hh = Math.min(hh, Math.max(MINH, a.h - 72));   // never larger than the screen
-        let x = clamp(i.x, 0, Math.max(0, a.w - w)), y = clamp(i.y, 0, Math.max(0, a.h - hh));
+        w = Math.min(w, Math.max(MINW, a.w - 16)); hh = Math.min(hh, Math.max(MINH, a.h - 16));   // never larger than the screen
+        const [px, py] = posOf(i, w, hh);
+        let x = clamp(px, 0, Math.max(0, a.w - w)), y = clamp(py, 0, Math.max(0, a.h - hh));
         if (overlaps(blocks, x, y, w, hh)) {
           const tw = k ? Math.max(MINW, Math.round(w * k)) : MINW, th = k ? Math.max(MINH, Math.round(hh * k)) : MINH;
-          const spot = findSpot(tw, th, blocks) || findSpot(MINW, MINH, blocks);
-          if (spot) { x = spot.x; y = spot.y; if (spot && findSpot(tw, th, blocks)) { w = tw; hh = th; } else { w = MINW; hh = MINH; } }
+          const spot = nearestSpot(x, y, tw, th, blocks);
+          if (spot) { x = spot.x; y = spot.y; w = tw; hh = th; }
           else if (!cascade) return null;
-          else { w = MINW; hh = MINH; x = clamp(a.w - w - 8 - (n % 4) * 28, 0, a.w); y = clamp(64 + (n % 6) * 28, 0, Math.max(0, a.h - hh)); n++; }
+          else { w = MINW; hh = MINH; x = clamp(a.w - w - 8 - (n % 4) * 28, 0, a.w); y = clamp(16 + (n % 6) * 28, 0, Math.max(0, a.h - hh)); n++; }
         }
         blocks.push({ x, y, w, h: hh }); out.push([i, x, y, w, hh]);
       }
@@ -711,7 +738,7 @@
     if (saved && Array.isArray(saved.list)) {
       saved.list.slice(0, MAX).forEach((r) => {
         if (!r || !TYPES[r.type] || !SIZES[r.size]) return;
-        const inst = { id: typeof r.id === 'string' ? r.id : uid(), type: r.type, size: r.size, x: +r.x || 0, y: +r.y || 0, ...sizeOf(r), ...cleanCfg(r), ...(typeof r.text === 'string' ? { text: r.text.slice(0, 5000) } : {}) };
+        const inst = { id: typeof r.id === 'string' ? r.id : uid(), type: r.type, size: r.size, x: +r.x || 0, y: +r.y || 0, ...sizeOf(r), ...anchorSan(r), ...cleanCfg(r), ...(typeof r.text === 'string' ? { text: r.text.slice(0, 5000) } : {}) };
         insts.push(inst); mount(inst);
       });
       relayout();

@@ -402,6 +402,15 @@
   }
 
   /* ---- z-order & focus ---- */
+  /** Snap a window to a half of the screen, or take it out of a snap (used by keyboard shortcuts). */
+  WM.snap = (win, kind) => { if (win && !win.closing && !win.minimized) applySnap(win, kind); };
+  WM.unsnap = function (win) {
+    if (!win || !win.snap) return;
+    geomAnim(win); win.el.classList.remove('snapped'); win.snap = null;
+    if (win.restoreRect) applyRect(win, win.restoreRect);
+    win.restoreRect = null;
+  };
+
   function compactZ() {
     const ordered = WM.all().sort((a, b) => (+a.el.style.zIndex || 0) - (+b.el.style.zIndex || 0));
     zCounter = 100;

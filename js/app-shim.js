@@ -24,6 +24,8 @@
     Object.defineProperty(window, 'localStorage', { configurable: true, get: function () { return st; } });
     var last = 0;
     var ping = function () { var n = Date.now(); if (n - last > 4000) { last = n; try { P.security.ping(); } catch (e) { /* ignore */ } } };
+    // forward ulyOS shortcuts (Ctrl+Shift+F full screen, F1 help, …) pressed while an app has the focus
+    addEventListener('keydown', function (e) { try { if (P.shortcuts && P.shortcuts.handle(e)) e.stopPropagation(); } catch (x) { /* ignore */ } }, true);
     ['pointerdown', 'keydown', 'wheel'].forEach(function (e) { addEventListener(e, ping, { passive: true, capture: true }); });
   } catch (e) { console.warn('ulyOS storage shim failed', e); }
 })();

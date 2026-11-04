@@ -3,8 +3,13 @@
    Add a new entry at the TOP for every release and bump ulyOS.version.
    ========================================================================== */
 window.ulyOS = window.ulyOS || {};
-ulyOS.version = '1.21.0';
+ulyOS.version = '1.22.0';
 ulyOS.CHANGELOG = [
+  { v: '1.22.0', d: '2026-11-04', n: [
+    'Keyboard shortcuts for every main function. Ctrl+Shift+F full screen, Ctrl+Shift+A Start menu, Ctrl+Shift+D show desktop, Ctrl+Shift+L lock, Ctrl+Shift+S screenshot; Alt+Shift+Up / Down / Left / Right maximize, minimize and snap the window, Alt+Shift+Q closes it, Alt+[ and Alt+] switch windows; Alt+Shift+F / S / T / G / K / B / A / J open Files, Settings, Task Manager, Gemini Live, Speak, Beam, App Store and Jarvis; Alt+Shift+D flips dark / light',
+    'Press F1, ? or Ctrl+/ for the shortcut cheat sheet (also Help → Keyboard shortcuts). Menu-bar items show their keys. The bundled apps pass shortcuts through, so they work while an app has the focus',
+    'Chosen to avoid keys the browser reserves for itself (Ctrl+N, Ctrl+T, Ctrl+W, Alt+F4), and matched by physical key so they work on any keyboard layout and on a Mac',
+  ] },
   { v: '1.21.0', d: '2026-11-03', n: [
     'Jarvis → Hands: a webcam hand-tracking board built into ulyOS. Pinch and drag glass cards, tap to close, flick to throw, resize with two hands, clap to sweep the board clean. A ring shows whether your assistant is idle, listening, thinking or speaking. Notes and images become cards, and cards also work with a mouse or finger. Hand tracking is Google MediaPipe, bundled and run on your device',
     'Your assistant now has tools: it can search and read your notes, add to them (it asks first, on screen or by saying yes / no) and put things on the Hands board when you ask to see something',

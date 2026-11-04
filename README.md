@@ -114,6 +114,30 @@ The Stack tab also checks whether his face (port 8790) and hands (port 8794) ser
 
 The bundled apps run inside ulyOS windows as their own documents (own strict policy) with their browser storage redirected into the signed-in profile's encrypted vault.
 
+## Keyboard shortcuts
+
+Press **F1** (or **?** or **Ctrl+/**) inside ulyOS for the cheat sheet. They also show next to the menu-bar items.
+
+| Keys | Does |
+|---|---|
+| Ctrl+Shift+F | Full screen on / off (F11 works too) |
+| Ctrl+Shift+A | Start menu / search apps |
+| Ctrl+Shift+D | Show desktop / bring windows back |
+| Ctrl+Shift+L | Lock |
+| Ctrl+Shift+S | Screenshot |
+| Alt+Shift+D | Dark / light theme |
+| Alt+Shift+R | Surprise me (random wallpaper) |
+| Alt+[ / Alt+] | Previous / next window |
+| Alt+Shift+↑ / ↓ | Maximize or restore / minimize |
+| Alt+Shift+← / → | Snap window to the left / right half |
+| Alt+Shift+Q | Close the window |
+| Alt+Shift+F / N | Files / new text document |
+| Alt+Shift+S / T | Settings / Task Manager |
+| Alt+Shift+G / K / B | Gemini Live / Speak / Beam |
+| Alt+Shift+A / J | App Store / Jarvis |
+
+Browsers keep Ctrl+N, Ctrl+T, Ctrl+W and Alt+F4 for themselves, so ulyOS uses other combinations. Keys are matched by physical key, so they work on any keyboard layout. The bundled apps pass the shortcuts through; a website opened in a window (YouTube etc.) keeps its own keys until you click the title bar.
+
 ## Window manager
 Drag, resize, maximize, minimize, close, edge snap, z-order. Iframes get `pointer-events: none` during drags and resizes.
 

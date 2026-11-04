@@ -376,6 +376,7 @@
     contactBtn.addEventListener('click', () => { closeMenu(); ulyOS.admin.contact(); });
     offBtn.addEventListener('click', () => { closeMenu(); ulyOS.offline.download(); });
     Shell.closeStart = closeMenu;
+    Shell.toggleStart = () => (menu.classList.contains('open') ? closeMenu() : openMenu());
   }
 
   /* ------------------------------------------------------------------------
@@ -412,6 +413,7 @@
 
     add(logo, () => [
       { label: 'About ulyOS ' + ulyOS.version, icon: 'info', action: about },
+      { label: 'Keyboard shortcuts…   F1', icon: 'sliders', action: () => ulyOS.shortcuts.show() },
       { label: 'Guided tour', icon: 'compass', action: () => ulyOS.tour.start() }, { separator: true },
       { label: 'System Settings…', icon: 'settings', action: () => API().openSettings() },
       { label: 'Task Manager', icon: 'activity', action: () => API().SYS_APPS.taskmgr.open() }, { separator: true },
@@ -425,11 +427,11 @@
       return w ? WM.menuFor(w) : [{ label: 'New URL shortcut…', icon: 'plus', action: API().newShortcut }, { label: 'Open Files', icon: 'folder', action: () => ulyOS.FS.open() }, { separator: true }, { label: 'Settings…', icon: 'settings', action: () => API().openSettings() }];
     });
     add(h('button', { class: 'mb-btn', text: 'File' }), () => [
-      { label: 'New text document', icon: 'filePlus', action: () => ulyOS.FS.newDocument() },
+      { label: 'New text document   Alt+Shift+N', icon: 'filePlus', action: () => ulyOS.FS.newDocument() },
       { label: 'New URL shortcut…', icon: 'plus', action: API().newShortcut },
-      { label: 'Open Files', icon: 'folder', action: () => ulyOS.FS.open() }, { separator: true },
+      { label: 'Open Files   Alt+Shift+F', icon: 'folder', action: () => ulyOS.FS.open() }, { separator: true },
       ...(ulyOS.Capture ? ulyOS.Capture.menuItems().map((m, i) => (i === 0 ? { ...m, label: 'Screenshot…   Ctrl+Shift+S' } : m)).concat([{ separator: true }]) : []),
-      { label: 'Close window', icon: 'x', disabled: !WM.focused(), action: () => WM.focused() && WM.close(WM.focused()) },
+      { label: 'Close window   Alt+Shift+Q', icon: 'x', disabled: !WM.focused(), action: () => WM.focused() && WM.close(WM.focused()) },
     ]);
     add(h('button', { class: 'mb-btn', text: 'View' }), () => [
       { label: 'Surprise me  🎲', icon: 'sparkles', action: () => API().surprise(true) },
@@ -438,16 +440,16 @@
       { label: (get('taskbarAutoHide') ? '✓ ' : '    ') + 'Auto-hide taskbar / dock', icon: 'arrowUp', action: () => API().Settings.set('taskbarAutoHide', !get('taskbarAutoHide')) },
       { label: 'Dock position', icon: 'desktop', submenu: ['bottom', 'top', 'left', 'right'].map((p) => ({ label: (get('taskbarPos') === p ? '✓ ' : '    ') + p[0].toUpperCase() + p.slice(1), action: () => API().Settings.set('taskbarPos', p) })) },
       { label: 'Customize dock & menu bar…', icon: 'sliders', action: () => API().openSettings('shell') }, { separator: true },
-      ...(!document.documentElement.requestFullscreen ? [] : [{ label: document.fullscreenElement ? 'Exit full screen' : 'Enter full screen', icon: 'fullscreen', action: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }]),
+      ...(!document.documentElement.requestFullscreen ? [] : [{ label: (document.fullscreenElement ? 'Exit full screen' : 'Enter full screen') + '   Ctrl+Shift+F', icon: 'fullscreen', action: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen?.()) }]),
     ]);
     add(h('button', { class: 'mb-btn', text: 'Window' }), () => {
       const f = WM.focused(), all = WM.all().filter((w) => !w.closing);
       return [
-        { label: 'Minimize', icon: 'minus', disabled: !f, action: () => f && WM.minimize(f) },
-        { label: 'Zoom', icon: 'fullscreen', disabled: !f || !f.resizable, action: () => f && WM.maximize(f) },
-        { label: 'Close', icon: 'x', disabled: !f, action: () => f && WM.close(f) }, { separator: true },
+        { label: 'Minimize   Alt+Shift+↓', icon: 'minus', disabled: !f, action: () => f && WM.minimize(f) },
+        { label: 'Zoom   Alt+Shift+↑', icon: 'fullscreen', disabled: !f || !f.resizable, action: () => f && WM.maximize(f) },
+        { label: 'Close   Alt+Shift+Q', icon: 'x', disabled: !f, action: () => f && WM.close(f) }, { separator: true },
         { label: 'Minimize all', icon: 'minus', disabled: !all.length, action: () => WM.minimizeAll() },
-        { label: 'Show desktop / restore', icon: 'desktop', action: () => (all.some((w) => !w.minimized) ? WM.minimizeAll() : WM.restoreAll()) },
+        { label: 'Show desktop / restore   Ctrl+Shift+D', icon: 'desktop', action: () => (all.some((w) => !w.minimized) ? WM.minimizeAll() : WM.restoreAll()) },
         ...(all.length ? [{ separator: true }, ...all.map((w) => ({ label: (w.focused ? '✓ ' : '    ') + w.title.replace(/^● /, ''), action: () => WM.focus(w) }))] : []),
       ];
     });
